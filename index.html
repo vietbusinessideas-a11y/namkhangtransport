@@ -563,27 +563,11 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
         </div>
       </div>
     </div>
-
-  </div>
-</main>
-
 <script>
-// ==================== SUPABASE CONFIG - TỐI ƯU CHO STATIC HTML ====================
+// ==================== SUPABASE CONFIG - PHIÊN BẢN ỔN ĐỊNH ====================
 
-// Ưu tiên lấy từ Vercel (nếu inject được), sau đó fallback về giá trị bạn cung cấp
-const SUPABASE_URL = 'https://sanofehjuxcwyogilwht.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_ndfztY5QjTbbUR6RYMeSQg_VR4EugZg';
-
-// Nếu Vercel inject được biến (một số trường hợp), sẽ ghi đè
-if (typeof process !== 'undefined' && process.env && process.env.SUPABASE_URL) {
-  SUPABASE_URL = process.env.SUPABASE_URL;
-}
-if (typeof process !== 'undefined' && process.env && process.env.SUPABASE_ANON_KEY) {
-  SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-}
-
-const SB_URL = SUPABASE_URL;
-const SB_KEY = SUPABASE_ANON_KEY;
+const SB_URL = 'https://sanofehjuxcwyogilwht.supabase.co';
+const SB_KEY = 'sb_publishable_ndfztY5QjTbbUR6RYMeSQg_VR4EugZg';
 
 const SB_H = {
   'apikey': SB_KEY,
@@ -592,50 +576,60 @@ const SB_H = {
   'Prefer': 'return=representation'
 };
 
-console.log('%c[Supabase] Đang kết nối đến: ' + SB_URL, 'color:#2563eb; font-weight:600');
+console.log('%c[Supabase] Đang kết nối: ' + SB_URL, 'color:#2563eb; font-weight:600');
 
-// ==================== PHẦN CODE CÒN LẠI GIỮ NGUYÊN ====================
+// ==================== CÁC HÀM SUPABASE ====================
 
 async function sbSelect(t, p = '') {
-  const r = await fetch(`${SB_URL}/rest/v1/${t}?${p}`, { headers: SB_H });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${t}?${p}`, { headers: SB_H });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    console.error('sbSelect error:', e);
+    throw e;
+  }
 }
 
 async function sbInsert(t, b) {
-  const r = await fetch(`${SB_URL}/rest/v1/${t}`, { 
-    method: 'POST', 
-    headers: SB_H, 
-    body: JSON.stringify(b) 
+  const r = await fetch(`${SB_URL}/rest/v1/${t}`, {
+    method: 'POST',
+    headers: SB_H,
+    body: JSON.stringify(b)
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
 
 async function sbUpdate(t, id, b) {
-  const r = await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${id}`, { 
-    method: 'PATCH', 
-    headers: SB_H, 
-    body: JSON.stringify(b) 
+  const r = await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: SB_H,
+    body: JSON.stringify(b)
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
 
 async function sbDelete(t, id) {
-  const r = await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${id}`, { 
-    method: 'DELETE', 
-    headers: SB_H 
+  const r = await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: SB_H
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
-// ... **Từ đây trở xuống giữ nguyên toàn bộ code cũ của bạn** (let DB = ..., functions render, loadDB(), v.v. đến hết file) ...
+// ==================== PHẦN CODE CÒN LẠI GIỮ NGUYÊN HOÀN TOÀN ====================
 
 let DB={hopDong:[],thuChi:[],xe:[],taiXe:[],khachHang:[]};
 
-// (Paste toàn bộ code còn lại từ file cũ của bạn vào đây, bắt đầu từ const DEFAULT_HD = ... đến hết)
+// === DÁN TOÀN BỘ CODE CŨ TỪ ĐÂY TRỞ XUỐNG (từ const DEFAULT_HD = ... đến hết file script cũ) ===
+// Bạn copy từ file cũ của bạn, bắt đầu từ dòng:
+// const DEFAULT_HD=[ ... ]  cho đến hết script
 
+// (Paste hết phần còn lại ở đây)
+
+// Cuối cùng giữ nguyên 2 dòng này:
 loadDB();
 setTimeout(renderNotifPanel, 1200);
 
