@@ -136,7 +136,56 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 @media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.chart-row{grid-template-columns:1fr}.content{padding:16px 18px}}
-@media(max-width:767px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.main{margin-left:0}.menu-btn{display:flex!important}.content{padding:12px}.kpi-grid{grid-template-columns:1fr 1fr}.form-row{grid-template-columns:1fr}.tab-bar{width:100%}.tab{flex:1;text-align:center}.topbar{padding:0 14px}.detail-grid{grid-template-columns:1fr}}
+/* ── RESPONSIVE MOBILE ── */
+@media(max-width:767px){
+  .sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}
+  .main{margin-left:0}.menu-btn{display:flex!important}
+  .content{padding:12px}
+  .kpi-grid{grid-template-columns:1fr 1fr}
+  .form-row{grid-template-columns:1fr}
+  .tab-bar{width:100%}.tab{flex:1;text-align:center}
+  .topbar{padding:0 14px}
+  .detail-grid{grid-template-columns:1fr}
+  .chart-row{grid-template-columns:1fr}
+
+  /* Bảng mobile: ẩn cột phụ, giữ cột quan trọng */
+  #hd-body tr td:nth-child(3),
+  #hd-body tr td:nth-child(4),
+  #hd-body tr td:nth-child(5){display:none}
+  #hd-body tr th:nth-child(3),
+  #hd-body tr th:nth-child(4),
+  #hd-body tr th:nth-child(5){display:none}
+
+  #tc-body tr td:nth-child(4),
+  #tc-body tr td:nth-child(5){display:none}
+
+  #kh-body tr td:nth-child(4),
+  #kh-body tr td:nth-child(5){display:none}
+
+  /* Bảng không scroll ngang cứng */
+  .dt{min-width:unset!important;width:100%}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  /* KPI nhỏ hơn */
+  .kpi-value{font-size:1.1rem}
+  .kpi-card{padding:12px}
+
+  /* Chart row 1 cột */
+  .chart-row{grid-template-columns:1fr}
+
+  /* Dashboard grid */
+  #page-dashboard > div:last-child{grid-template-columns:1fr!important}
+
+  /* Báo cáo grid */
+  #bc-panel-tongquan > div:last-child{grid-template-columns:1fr!important}
+
+  /* Xe grid */
+  .xe-grid{grid-template-columns:1fr}
+
+  /* Topbar actions wrap */
+  .topbar-right{gap:4px}
+  .btn{padding:6px 10px;font-size:.75rem}
+}
 </style>
 </head>
 <body>
@@ -947,19 +996,32 @@ function markAllRead(){buildNotifs().forEach(function(it){readIds.add(it.id);});
 document.addEventListener('click',function(e){var p=document.getElementById('notifPanel');var btn=document.getElementById('notifBtn');if(p&&p.style.display!=='none'&&!p.contains(e.target)&&btn&&!btn.contains(e.target))closeNotifPanel();});
 
 // ═══════════════════════════════════════
-// CÀI ĐẶT CÔNG TY
+// CÀI ĐẶT CÔNG TY — lưu Supabase
 // ═══════════════════════════════════════
-var CD_KEY='nk_caidat_v1';
 var DEFAULT_CD={ten:'Công ty TNHH Nam Khang Transport',mst:'0123456789',sdt:'0908 123 456',email:'contact@namkhang.vn',diachi:'123 Nguyễn Văn Linh, Q.7, TP.HCM'};
 
-function loadCaiDat(){
-  var cd=DEFAULT_CD;
-  try{var raw=localStorage.getItem(CD_KEY);if(raw)cd=Object.assign({},DEFAULT_CD,JSON.parse(raw));}catch(e){}
+function fillCaiDat(cd){
   document.getElementById('cd-ten').value=cd.ten||'';
   document.getElementById('cd-mst').value=cd.mst||'';
   document.getElementById('cd-sdt').value=cd.sdt||'';
   document.getElementById('cd-email').value=cd.email||'';
-  document.getElementById('cd-diachi').value=cd.diachi||'';
+  document.getElementById('cd-diachi').value=cd.dia_chi||cd.diachi||'';
+}
+
+function loadCaiDat(){
+  // Hiện dữ liệu mẫu trước
+  fillCaiDat(DEFAULT_CD);
+  // Fetch Supabase
+  sbFetch('cai_dat','id=eq.company&limit=1').then(function(rows){
+    if(rows&&rows.length){fillCaiDat(rows[0]);}
+  }).catch(function(e){
+    console.warn('loadCaiDat error:',e.message);
+    // Fallback localStorage
+    try{
+      var raw=localStorage.getItem('nk_caidat_v1');
+      if(raw)fillCaiDat(JSON.parse(raw));
+    }catch(e2){}
+  });
 }
 
 function saveCaiDat(){
@@ -968,10 +1030,24 @@ function saveCaiDat(){
     mst:document.getElementById('cd-mst').value.trim(),
     sdt:document.getElementById('cd-sdt').value.trim(),
     email:document.getElementById('cd-email').value.trim(),
-    diachi:document.getElementById('cd-diachi').value.trim(),
+    dia_chi:document.getElementById('cd-diachi').value.trim(),
+    updated_at:new Date().toISOString()
   };
-  try{localStorage.setItem(CD_KEY,JSON.stringify(cd));toast('✅ Đã lưu thông tin công ty!','success');}
-  catch(e){toast('❌ Không thể lưu: '+e.message,'error');}
+  // Upsert vào Supabase
+  fetch(SB_URL+'/rest/v1/cai_dat?id=eq.company',{
+    method:'PATCH',
+    headers:Object.assign({},SB_H,{'Prefer':'return=representation'}),
+    body:JSON.stringify(cd)
+  }).then(function(r){
+    if(!r.ok)throw new Error(r.status);
+    // Backup localStorage
+    try{localStorage.setItem('nk_caidat_v1',JSON.stringify({diachi:cd.dia_chi,ten:cd.ten,mst:cd.mst,sdt:cd.sdt,email:cd.email}));}catch(e){}
+    toast('✅ Đã lưu thông tin công ty!','success');
+  }).catch(function(e){
+    // Fallback localStorage nếu Supabase lỗi
+    try{localStorage.setItem('nk_caidat_v1',JSON.stringify({diachi:cd.dia_chi,ten:cd.ten,mst:cd.mst,sdt:cd.sdt,email:cd.email}));}catch(e2){}
+    toast('💾 Đã lưu local (Supabase: '+e.message+')','info');
+  });
 }
 function exportExcel(){
   showModal('📊 Xuất Excel','Chọn dữ liệu muốn xuất',
