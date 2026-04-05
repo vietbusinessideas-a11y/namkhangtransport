@@ -328,6 +328,18 @@ var DEFAULT_KH=[
 // ═══════════════════════════════════════
 function fmt(n){return new Intl.NumberFormat('vi-VN').format(n);}
 function fmtM(n){if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'K';return fmt(n);}
+
+// Format input số tiền — tự thêm dấu phẩy khi gõ
+function fmtInput(el){
+  var raw=el.value.replace(/[^0-9]/g,'');
+  if(raw===''){el.value='';return;}
+  el.value=new Intl.NumberFormat('vi-VN').format(parseInt(raw));
+}
+// Đọc giá trị thuần từ input đã format
+function readMoney(id){
+  var raw=(document.getElementById(id).value||'').replace(/[.,\s]/g,'');
+  return parseInt(raw)||0;
+}
 function fmtD(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function getMY(d){if(!d)return'';var p=d.split('-');return p[1]+'/'+p[0];}
 function uid(){return'id'+Date.now()+Math.random().toString(36).slice(2,5);}
@@ -465,23 +477,29 @@ function openHDModal(id){
   if(!requireAdmin())return;
   var h=id?DB.hopDong.find(function(x){return x.id===id;}):null;
   if(!h)h={};
-  var xeOpts=['','51B-12345','51C-23456','51A-34567','51D-45678','51E-56789'].map(function(v){return'<option'+(v===h.xe?' selected':'')+'>'+( v||'-- Chọn xe --')+'</option>';}).join('');
-  var txOpts=['','Trần Văn A','Nguyễn Văn B','Phạm Văn D','Lê Văn C'].map(function(v){return'<option'+(v===h.taixe?' selected':'')+'>'+( v||'-- Chọn --')+'</option>';}).join('');
+  var xeOpts=['','51B-12345','51C-23456','51A-34567','51D-45678','51E-56789'].concat(DB.xe.filter(function(x){return['51B-12345','51C-23456','51A-34567','51D-45678','51E-56789'].indexOf(x.bien)<0;}).map(function(x){return x.bien;}));
+  var xeSel=xeOpts.map(function(v){return'<option'+(v===h.xe?' selected':'')+'>'+( v||'-- Chọn xe --')+'</option>';}).join('');
+  var txOpts=[''].concat(DB.taiXe.map(function(t){return t.ten;}));
+  var txSel=txOpts.map(function(v){return'<option'+(v===h.taixe?' selected':'')+'>'+( v||'-- Chọn --')+'</option>';}).join('');
+  // Autocomplete khách hàng
+  var khList=DB.khachHang.map(function(k){return'<option value="'+k.ten+'">';}).join('');
+  var today=new Date().toISOString().slice(0,10);
   showModal(id?'Sửa HĐ':'Thêm HĐ mới',id?h.so:'',
-    '<div class="form-row"><div class="fg"><label class="fl">Số HĐ</label><input class="fc" id="f-so" value="'+(h.so||'HD-'+Date.now().toString().slice(-4))+'"></div><div class="fg"><label class="fl">Ngày</label><input type="date" class="fc" id="f-ngay" value="'+(h.ngay||'2026-04-01')+'"></div></div>'+
-    '<div class="fg"><label class="fl">Khách hàng <span class="req">*</span></label><input class="fc" id="f-kh" value="'+(h.kh||'')+'" placeholder="Tên khách hàng"></div>'+
+    '<datalist id="kh-list">'+khList+'</datalist>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Số HĐ</label><input class="fc" id="f-so" value="'+(h.so||'HD-'+Date.now().toString().slice(-4))+'"></div><div class="fg"><label class="fl">Ngày</label><input type="date" class="fc" id="f-ngay" value="'+(h.ngay||today)+'"></div></div>'+
+    '<div class="fg"><label class="fl">Khách hàng <span class="req">*</span></label><input class="fc" id="f-kh" value="'+(h.kh||'')+'" placeholder="Gõ để tìm khách hàng..." list="kh-list" autocomplete="off"></div>'+
     '<div class="fg"><label class="fl">Tuyến đường</label><input class="fc" id="f-tuyen" value="'+(h.tuyen||'')+'" placeholder="HCM → ..."></div>'+
-    '<div class="form-row"><div class="fg"><label class="fl">Xe</label><select class="fc" id="f-xe">'+xeOpts+'</select></div><div class="fg"><label class="fl">Tài xế</label><select class="fc" id="f-taixe">'+txOpts+'</select></div></div>'+
-    '<div class="form-row"><div class="fg"><label class="fl">Giá trị (VNĐ) <span class="req">*</span></label><input type="number" class="fc" id="f-giatri" value="'+(h.giatri||'')+'"></div><div class="fg"><label class="fl">Đã thu</label><input type="number" class="fc" id="f-dathu" value="'+(h.dathu||0)+'"></div></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Xe</label><select class="fc" id="f-xe">'+xeSel+'</select></div><div class="fg"><label class="fl">Tài xế</label><select class="fc" id="f-taixe">'+txSel+'</select></div></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Giá trị (VNĐ) <span class="req">*</span></label><input type="text" inputmode="numeric" class="fc" id="f-giatri" value="'+(h.giatri?fmt(h.giatri):'')+'" placeholder="0" oninput="fmtInput(this)"></div><div class="fg"><label class="fl">Đã thu</label><input type="text" inputmode="numeric" class="fc" id="f-dathu" value="'+(h.dathu?fmt(h.dathu):'0')+'" placeholder="0" oninput="fmtInput(this)"></div></div>'+
     '<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="f-tt"><option value="cho_xe"'+(h.tt==='cho_xe'?' selected':'')+'>Chờ thực hiện</option><option value="dang_chay"'+(h.tt==='dang_chay'?' selected':'')+'>Đang thực hiện</option><option value="hoan_thanh"'+(h.tt==='hoan_thanh'?' selected':'')+'>Hoàn thành</option><option value="cho_thanh_toan"'+(h.tt==='cho_thanh_toan'?' selected':'')+'>Chờ thanh toán</option></select></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveHD(\''+(id||'')+'\')">💾 Lưu</button>');
 }
 function saveHD(id){
   if(!requireAdmin())return;
-  var giatri=parseInt(document.getElementById('f-giatri').value);
+  var giatri=readMoney('f-giatri');
   var kh=document.getElementById('f-kh').value.trim();
   if(!kh||!giatri){toast('Vui lòng nhập đủ thông tin!','error');return;}
-  var obj={id:id||uid(),so:document.getElementById('f-so').value,kh:kh,tuyen:document.getElementById('f-tuyen').value,ngay:document.getElementById('f-ngay').value||'',xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,giatri:giatri,dathu:parseInt(document.getElementById('f-dathu').value)||0,tt:document.getElementById('f-tt').value};
+  var obj={id:id||uid(),so:document.getElementById('f-so').value,kh:kh,tuyen:document.getElementById('f-tuyen').value,ngay:document.getElementById('f-ngay').value||'',xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,giatri:giatri,dathu:readMoney('f-dathu'),tt:document.getElementById('f-tt').value};
   var row={so_hd:obj.so,khach_hang:obj.kh,tuyen_duong:obj.tuyen,ngay_th:obj.ngay||null,bien_so_xe:obj.xe,tai_xe:obj.taixe,gia_tri:obj.giatri,da_thu:obj.dathu,trang_thai:obj.tt};
   var p=id?sbPatch('hop_dong',id,row):sbPost('hop_dong',row);
   p.then(function(res){
@@ -673,10 +691,12 @@ function openTCModal(type){
   var hdOpts='<option value="">—</option>'+DB.hopDong.map(function(h){return'<option>'+h.so+'</option>';}).join('');
   var xeOpts='<option value="">—</option>'+DB.xe.map(function(x){return'<option>'+x.bien+'</option>';}).join('');
   var txOpts='<option value="">—</option>'+DB.taiXe.map(function(t){return'<option>'+t.ten+'</option>';}).join('');
+  var today=new Date().toISOString().slice(0,10);
+  var timeNow=new Date().toTimeString().slice(0,5);
   showModal(isThu?'💰 Ghi nhận Thu':'💸 Ghi nhận Chi','',
     '<div class="fg"><label class="fl">Loại <span class="req">*</span></label><select class="fc" id="f-loai">'+loaiOpts+'</select></div>'+
-    '<div class="form-row"><div class="fg"><label class="fl">Ngày <span class="req">*</span></label><input type="date" class="fc" id="f-ngay" value="2026-04-01"></div><div class="fg"><label class="fl">Giờ</label><input type="time" class="fc" id="f-gio" value="08:00"></div></div>'+
-    '<div class="fg"><label class="fl">Số tiền (VNĐ) <span class="req">*</span></label><input type="number" class="fc" id="f-sotien" placeholder="0"></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Ngày <span class="req">*</span></label><input type="date" class="fc" id="f-ngay" value="'+today+'"></div><div class="fg"><label class="fl">Giờ</label><input type="time" class="fc" id="f-gio" value="'+timeNow+'"></div></div>'+
+    '<div class="fg"><label class="fl">Số tiền (VNĐ) <span class="req">*</span></label><input type="text" inputmode="numeric" class="fc" id="f-sotien" placeholder="0" oninput="fmtInput(this)"></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Liên kết HĐ</label><select class="fc" id="f-hd">'+hdOpts+'</select></div><div class="fg"><label class="fl">Hình thức TT</label><select class="fc" id="f-httt"><option>Chuyển khoản</option><option>Tiền mặt</option></select></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Xe</label><select class="fc" id="f-xe">'+xeOpts+'</select></div><div class="fg"><label class="fl">Tài xế</label><select class="fc" id="f-taixe">'+txOpts+'</select></div></div>'+
     '<div class="fg"><label class="fl">Đối tác</label><input class="fc" id="f-kh" placeholder="Tên KH / nhà cung cấp"></div>'+
@@ -684,13 +704,14 @@ function openTCModal(type){
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn" style="background:'+(isThu?'var(--green)':'var(--red)')+';color:#fff" onclick="saveTC(\''+type+'\')">💾 Lưu</button>');
 }
 function saveTC(type){
-  var sotien=parseInt(document.getElementById('f-sotien').value);
+  var raw=document.getElementById('f-sotien').value.replace(/[.,\s]/g,'');
+  var sotien=parseInt(raw);
   if(!sotien||sotien<=0){toast('Nhập số tiền hợp lệ!','error');return;}
   var obj={id:uid(),type:type,loai:document.getElementById('f-loai').value,ngay:document.getElementById('f-ngay').value,gio:document.getElementById('f-gio').value,sotien:sotien,hd:document.getElementById('f-hd').value,httt:document.getElementById('f-httt').value,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,kh:document.getElementById('f-kh').value,mota:document.getElementById('f-mota').value};
   var row={loai_gd:type,danh_muc:obj.loai,ngay_gd:obj.ngay,gio_gd:obj.gio,so_tien:sotien,hd_so:obj.hd,hinh_thuc:obj.httt,bien_so_xe:obj.xe,tai_xe:obj.taixe,doi_tac:obj.kh,mo_ta:obj.mota};
   sbPost('thu_chi',row).then(function(res){
     if(res&&res[0]&&res[0].id)obj.id=res[0].id;
-    DB.thuChi.unshift(obj);closeModal();renderTCAll();toast('✅ Đã ghi '+(type==='thu'?'thu':'chi')+': '+fmtM(sotien),'success');
+    DB.thuChi.unshift(obj);closeModal();renderTCAll();toast('✅ Đã ghi '+(type==='thu'?'thu':'chi')+': '+fmt(sotien)+' ₫','success');
   }).catch(function(e){toast('❌ '+e.message,'error');});
 }
 function deleteTC(id){
