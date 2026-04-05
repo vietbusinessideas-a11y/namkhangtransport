@@ -1289,20 +1289,22 @@ document.addEventListener('click',e=>{
 })();
 
 // INIT
-document.querySelectorAll('.nav-item[data-page]').forEach(n=>n.addEventListener('click',()=>navTo(n.dataset.page)));
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelectorAll('.nav-item[data-page]').forEach(n=>n.addEventListener('click',()=>navTo(n.dataset.page)));
 
-document.querySelector('.user-card').title='Nhấn để đăng xuất';
-document.querySelector('.user-card').onclick=()=>{
-  if(confirm('Đăng xuất khỏi hệ thống?')){
-    localStorage.removeItem('nk_session_v3');
-    window.location.replace('/login.html');
+  document.querySelector('.user-card').title='Nhấn để đăng xuất';
+  document.querySelector('.user-card').onclick=()=>{
+    if(confirm('Đăng xuất khỏi hệ thống?')){
+      localStorage.removeItem('nk_session_v3');
+      window.location.replace('/login.html');
+    }
+  };
+
+  if(initAuth()){
+    loadDB();
+    setTimeout(renderNotifPanel,1500);
   }
-};
-
-if(initAuth()){
-  loadDB();
-  setTimeout(renderNotifPanel,1500);
-}
+});
 </script>
 </body>
 </html>
