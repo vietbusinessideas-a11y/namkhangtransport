@@ -364,8 +364,8 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 function mapHD(r){return{id:r.id,so:r.so_hd||'',kh:r.khach_hang||'',tuyen:r.tuyen_duong||'',ngay:r.ngay_th||'',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',giatri:Number(r.gia_tri)||0,dathu:Number(r.da_thu)||0,tt:r.trang_thai||'cho_xe'};}
 function mapTC(r){return{id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',gio:r.gio_gd||'00:00',sotien:Number(r.so_tien)||0,hd:r.hd_so||'',httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',kh:r.doi_tac||'',mota:r.mo_ta||''};}
 function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',tt:r.trang_thai||'san_sang'};}
-function mapTX(r){return{id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',sdt:r.so_dt||'',luong:Number(r.luong_cb)||0,chuyen:0,doanhThu:0};}
-function mapKH(r){return{id:r.id,ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',hdCount:Number(r.hd_count)||0,doanhSo:Number(r.doanh_so)||0};}
+function mapTX(r){return{id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',ngaySinh:r.ngay_sinh||'',sdt:r.so_dt||'',luong:Number(r.luong_cb)||0,chuyen:0,doanhThu:0};}
+function mapKH(r){return{id:r.id,ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',diaChi:r.dia_chi||'',hdCount:0,doanhSo:0};}
 
 function loadDB(){
   // Load mẫu trước
@@ -524,15 +524,19 @@ function renderKH(){
 }
 function openKHModal(){
   if(!requireAdmin())return;
-  showModal('Thêm Khách hàng','','<div class="fg"><label class="fl">Tên <span class="req">*</span></label><input class="fc" id="f-ten" placeholder="Tên cá nhân / công ty"></div><div class="form-row"><div class="fg"><label class="fl">Loại</label><select class="fc" id="f-loai"><option>Doanh nghiệp</option><option>Trường học</option><option>Cá nhân</option></select></div><div class="fg"><label class="fl">SĐT</label><input class="fc" id="f-sdt" placeholder="0xxx..."></div></div>','<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveKH()">💾 Lưu</button>');
+  showModal('Thêm Khách hàng','',
+    '<div class="fg"><label class="fl">Tên <span class="req">*</span></label><input class="fc" id="f-ten" placeholder="Tên cá nhân / công ty"></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Loại</label><select class="fc" id="f-loai"><option>Doanh nghiệp</option><option>Trường học</option><option>Cá nhân</option></select></div><div class="fg"><label class="fl">SĐT</label><input class="fc" id="f-sdt" placeholder="0xxx..."></div></div>'+
+    '<div class="fg"><label class="fl">Địa chỉ</label><input class="fc" id="f-diachi" placeholder="Địa chỉ..."></div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveKH()">💾 Lưu</button>');
 }
 function saveKH(){
   if(!requireAdmin())return;
   var ten=document.getElementById('f-ten').value.trim();
   if(!ten){toast('Nhập tên!','error');return;}
-  var row={ten:ten,loai:document.getElementById('f-loai').value,so_dt:document.getElementById('f-sdt').value};
+  var row={ten:ten,loai:document.getElementById('f-loai').value,so_dt:document.getElementById('f-sdt').value,dia_chi:document.getElementById('f-diachi').value};
   sbPost('khach_hang',row).then(function(res){
-    var obj={id:(res&&res[0]&&res[0].id)||uid(),ten:ten,loai:row.loai,sdt:row.so_dt,hdCount:0,doanhSo:0};
+    var obj={id:(res&&res[0]&&res[0].id)||uid(),ten:ten,loai:row.loai,sdt:row.so_dt,diaChi:row.dia_chi,hdCount:0,doanhSo:0};
     DB.khachHang.unshift(obj);closeModal();renderKH();toast('✅ Đã thêm KH','success');
   }).catch(function(e){toast('❌ '+e.message,'error');});
 }
@@ -587,16 +591,16 @@ function openTXModal(id){
   var t=id?DB.taiXe.find(function(x){return x.id===id;}):null;if(!t)t={};
   showModal(id?'Sửa tài xế':'Thêm tài xế mới',id?t.ten:'',
     '<div class="form-row"><div class="fg"><label class="fl">Họ tên <span class="req">*</span></label><input class="fc" id="tf-ten" value="'+(t.ten||'')+'" placeholder="Nguyễn Văn A"></div><div class="fg"><label class="fl">Số điện thoại</label><input class="fc" id="tf-sdt" value="'+(t.sdt||'')+'" placeholder="09xx..."></div></div>'+
-    '<div class="form-row"><div class="fg"><label class="fl">CMND/CCCD</label><input class="fc" id="tf-cmnd" value="'+(t.cmnd||'')+'" placeholder="0790xxxxxxx"></div><div class="fg"><label class="fl">Hạng bằng lái</label><select class="fc" id="tf-bang">'+['B2','C','D','E','F'].map(function(v){return'<option'+(t.bangLai===v?' selected':'')+'>'+v+'</option>';}).join('')+'</select></div></div>'+
-    '<div class="fg"><label class="fl">Lương cơ bản (VNĐ)</label><input type="number" class="fc" id="tf-luong" value="'+(t.luong||8000000)+'"></div>',
+    '<div class="form-row"><div class="fg"><label class="fl">CMND/CCCD</label><input class="fc" id="tf-cmnd" value="'+(t.cmnd||'')+'" placeholder="0790xxxxxxx"></div><div class="fg"><label class="fl">Ngày sinh</label><input type="date" class="fc" id="tf-ngaysinh" value="'+(t.ngaySinh||'')+'"></div></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Hạng bằng lái</label><select class="fc" id="tf-bang">'+['B2','C','D','E','F'].map(function(v){return'<option'+(t.bangLai===v?' selected':'')+'>'+v+'</option>';}).join('')+'</select></div><div class="fg"><label class="fl">Lương cơ bản (VNĐ)</label><input type="text" inputmode="numeric" class="fc" id="tf-luong" value="'+(t.luong?fmt(t.luong):'')+'" placeholder="0" oninput="fmtInput(this)"></div></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveTX(\''+(id||'')+'\')">💾 Lưu</button>');
 }
 function saveTX(id){
   if(!requireAdmin())return;
   var ten=document.getElementById('tf-ten').value.trim();
   if(!ten){toast('Nhập họ tên tài xế!','error');return;}
-  var obj={id:id||uid(),ten:ten,sdt:document.getElementById('tf-sdt').value,cmnd:document.getElementById('tf-cmnd').value,bangLai:document.getElementById('tf-bang').value,luong:parseInt(document.getElementById('tf-luong').value)||8000000,chuyen:0,doanhThu:0};
-  var row={ho_ten:ten,so_dt:obj.sdt,cmnd:obj.cmnd,bang_lai:obj.bangLai,luong_cb:obj.luong};
+  var obj={id:id||uid(),ten:ten,sdt:document.getElementById('tf-sdt').value,cmnd:document.getElementById('tf-cmnd').value,ngaySinh:document.getElementById('tf-ngaysinh').value,bangLai:document.getElementById('tf-bang').value,luong:readMoney('tf-luong'),chuyen:0,doanhThu:0};
+  var row={ho_ten:ten,so_dt:obj.sdt,cmnd:obj.cmnd,bang_lai:obj.bangLai,ngay_sinh:obj.ngaySinh||null,luong_cb:obj.luong};
   var p=id?sbPatch('tai_xe',id,row):sbPost('tai_xe',row);
   p.then(function(res){
     if(id){DB.taiXe=DB.taiXe.map(function(x){return x.id===id?Object.assign({},x,obj):x;});}
@@ -708,7 +712,7 @@ function saveTC(type){
   var sotien=parseInt(raw);
   if(!sotien||sotien<=0){toast('Nhập số tiền hợp lệ!','error');return;}
   var obj={id:uid(),type:type,loai:document.getElementById('f-loai').value,ngay:document.getElementById('f-ngay').value,gio:document.getElementById('f-gio').value,sotien:sotien,hd:document.getElementById('f-hd').value,httt:document.getElementById('f-httt').value,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,kh:document.getElementById('f-kh').value,mota:document.getElementById('f-mota').value};
-  var row={loai_gd:type,danh_muc:obj.loai,ngay_gd:obj.ngay,gio_gd:obj.gio,so_tien:sotien,hd_so:obj.hd,hinh_thuc:obj.httt,bien_so_xe:obj.xe,tai_xe:obj.taixe,doi_tac:obj.kh,mo_ta:obj.mota};
+  var row={loai_gd:type,danh_muc:obj.loai,ngay_gd:obj.ngay,gio_gd:obj.gio,so_tien:sotien,hd_id:obj.hd,hinh_thuc:obj.httt,bien_so_xe:obj.xe,tai_xe:obj.taixe,doi_tac:obj.kh,mo_ta:obj.mota};
   sbPost('thu_chi',row).then(function(res){
     if(res&&res[0]&&res[0].id)obj.id=res[0].id;
     DB.thuChi.unshift(obj);closeModal();renderTCAll();toast('✅ Đã ghi '+(type==='thu'?'thu':'chi')+': '+fmt(sotien)+' ₫','success');
