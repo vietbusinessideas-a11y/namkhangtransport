@@ -1220,7 +1220,35 @@ document.addEventListener('click',e=>{
   if(p.style.display!=='none'&&!p.contains(e.target)&&!btn.contains(e.target))closeNotifPanel();
 });
 
+// ═══════════════════════════════════════
+// AUTH GUARD
+// ═══════════════════════════════════════
+(function authGuard(){
+  const SK='nk_session_v3';
+  try{
+    const raw=localStorage.getItem(SK);
+    if(!raw){window.location.replace('/login.html');return;}
+    const s=JSON.parse(raw);
+    if(!s?.user||Date.now()>s.exp){localStorage.removeItem(SK);window.location.replace('/login.html');return;}
+    // Hiển thị tên user lên sidebar
+    const u=s.user;
+    document.querySelector('.user-name').textContent=u.name||u.email||'Người dùng';
+    document.querySelector('.avatar').textContent=u.initial||(u.name||'U').slice(0,2).toUpperCase();
+    document.querySelector('.user-role').textContent=u.role==='admin'?'Admin':'Nhân viên';
+  }catch{window.location.replace('/login');}
+})();
+
 document.querySelectorAll('.nav-item[data-page]').forEach(n=>n.addEventListener('click',()=>navTo(n.dataset.page)));
+
+// Nút đăng xuất
+document.querySelector('.user-card').title='Nhấn để đăng xuất';
+document.querySelector('.user-card').onclick=()=>{
+  if(confirm('Đăng xuất khỏi hệ thống?')){
+    localStorage.removeItem('nk_session_v3');
+    window.location.replace('/login.html');
+  }
+};
+
 loadDB();
 setTimeout(renderNotifPanel,1200);
 </script>
