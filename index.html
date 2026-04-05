@@ -568,14 +568,37 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
 </main>
 
 <script>
+// ═══════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════
 const SB_URL='https://sanofehjuxcwyogilwht.supabase.co';
-const SB_KEY='sb_publishable_ndfztY5QjTbbUR6RYMeSQg_VR4EugZg';
-const SB_H={'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json','Prefer':'return=representation'};
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhbm9mZWhqdXhjd3lvZ2lsd2h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNDQxOTIsImV4cCI6MjA5MDgyMDE5Mn0.XeEevR1s7b2572gt1OUdEE2MQe7Oi5n3ejEwvuK0cPc';
+const SB_H={
+  'apikey':SB_KEY,
+  'Authorization':`Bearer ${SB_KEY}`,
+  'Content-Type':'application/json',
+  'Prefer':'return=representation'
+};
 
-async function sbSelect(t,p=''){const r=await fetch(`${SB_URL}/rest/v1/${t}?${p}`,{headers:SB_H});if(!r.ok)throw new Error(r.status);return r.json();}
-async function sbInsert(t,b){const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:SB_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(r.status);return r.json();}
-async function sbUpdate(t,id,b){const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:SB_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(r.status);return r.json();}
-async function sbDelete(t,id){const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SB_H});if(!r.ok)throw new Error(r.status);}
+async function sbSelect(t,p=''){
+  const r=await fetch(`${SB_URL}/rest/v1/${t}?${p}`,{headers:SB_H});
+  if(!r.ok){const e=await r.text();throw new Error(`${r.status}: ${e}`);}
+  return r.json();
+}
+async function sbInsert(t,b){
+  const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:SB_H,body:JSON.stringify(b)});
+  if(!r.ok){const e=await r.text();throw new Error(`${r.status}: ${e}`);}
+  return r.json();
+}
+async function sbUpdate(t,id,b){
+  const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:SB_H,body:JSON.stringify(b)});
+  if(!r.ok){const e=await r.text();throw new Error(`${r.status}: ${e}`);}
+  return r.json();
+}
+async function sbDelete(t,id){
+  const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SB_H});
+  if(!r.ok){const e=await r.text();throw new Error(`${r.status}: ${e}`);}
+}
 
 let DB={hopDong:[],thuChi:[],xe:[],taiXe:[],khachHang:[]};
 
@@ -630,12 +653,12 @@ const LOAIBADGE={'Thu hợp đồng':'b-green','Đặt cọc':'b-green','Thu kh�
 function badgeHTML(loai,type){const cls=LOAIBADGE[loai]||(type==='thu'?'b-green':'b-orange');return`<span class="badge ${cls}">${loai}</span>`;}
 
 async function loadDB(){
-  // Luôn load dữ liệu mẫu trước để UI không bị trắng
+  // Hiển thị dữ liệu mẫu trước để UI không trắng
   DB={hopDong:[...DEFAULT_HD],thuChi:[...DEFAULT_TC],xe:[...DEFAULT_XE],taiXe:[...DEFAULT_TX],khachHang:[...DEFAULT_KH]};
   updateBadges();
   renderCurrentPage();
 
-  // Sau đó thử kết nối Supabase, nếu có thì override
+  // Fetch Supabase song song
   try{
     const[hd,tc,xe,tx,kh]=await Promise.all([
       sbSelect('hop_dong','order=created_at.desc'),
@@ -644,23 +667,37 @@ async function loadDB(){
       sbSelect('tai_xe','order=ho_ten.asc'),
       sbSelect('khach_hang','order=ten.asc'),
     ]);
-    // Chỉ dùng Supabase nếu có ít nhất 1 bảng có data
-    const hasData=hd.length||tc.length||xe.length||tx.length||kh.length;
-    if(hasData){
-      if(hd.length) DB.hopDong=hd.map(r=>({id:r.id,so:r.so_hd,kh:r.khach_hang,tuyen:r.tuyen_duong||'',ngay:r.ngay_th||'',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',giatri:r.gia_tri||0,dathu:r.da_thu||0,tt:r.trang_thai||'cho_xe'}));
-      if(tc.length) DB.thuChi=tc.map(r=>({id:r.id,type:r.loai_gd,loai:r.danh_muc,ngay:r.ngay_gd,gio:r.gio_gd||'00:00',sotien:r.so_tien||0,hd:r.hd_so||'',httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',kh:r.doi_tac||'',mota:r.mo_ta||''}));
-      if(xe.length) DB.xe=xe.map(r=>({id:r.id,bien:r.bien_so,loai:r.loai_xe||'',nam:r.nam_sx||0,km:r.km_chay||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',tt:r.trang_thai||'san_sang'}));
-      if(tx.length) DB.taiXe=tx.map(r=>({id:r.id,ten:r.ho_ten,cmnd:r.cmnd||'',bangLai:r.bang_lai||'',sdt:r.so_dt||'',luong:r.luong_cb||0,chuyen:0,doanhThu:0}));
-      if(kh.length) DB.khachHang=kh.map(r=>({id:r.id,ten:r.ten,loai:r.loai||'',sdt:r.so_dt||'',hdCount:0,doanhSo:0}));
-      toast('☁️ Đã đồng bộ Supabase','success');
-      updateBadges();
-      renderCurrentPage();
-    } else {
-      toast('📦 Dùng dữ liệu mẫu','info');
-    }
-  }catch{
-    toast('📦 Dùng dữ liệu mẫu','info');
+    DB.hopDong=hd.length?hd.map(r=>({
+      id:r.id,so:r.so_hd||'',kh:r.khach_hang||'',tuyen:r.tuyen_duong||'',
+      ngay:r.ngay_th||'',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',
+      giatri:r.gia_tri||0,dathu:r.da_thu||0,tt:r.trang_thai||'cho_xe'
+    })):[...DEFAULT_HD];
+    DB.thuChi=tc.length?tc.map(r=>({
+      id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',
+      gio:r.gio_gd||'00:00',sotien:r.so_tien||0,hd:r.hd_so||'',
+      httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',
+      kh:r.doi_tac||'',mota:r.mo_ta||''
+    })):[...DEFAULT_TC];
+    DB.xe=xe.length?xe.map(r=>({
+      id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:r.nam_sx||0,
+      km:r.km_chay||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',
+      tt:r.trang_thai||'san_sang'
+    })):[...DEFAULT_XE];
+    DB.taiXe=tx.length?tx.map(r=>({
+      id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',
+      sdt:r.so_dt||'',luong:r.luong_cb||0,chuyen:0,doanhThu:0
+    })):[...DEFAULT_TX];
+    DB.khachHang=kh.length?kh.map(r=>({
+      id:r.id,ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',
+      hdCount:0,doanhSo:0
+    })):[...DEFAULT_KH];
+    toast('☁️ Dữ liệu từ Supabase','success');
+  }catch(err){
+    console.error('Supabase error:',err);
+    toast('⚠️ Dùng dữ liệu mẫu: '+err.message,'info');
   }
+  updateBadges();
+  renderCurrentPage();
 }
 
 let currentPage='dashboard';
