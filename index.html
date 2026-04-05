@@ -192,7 +192,10 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
       <div class="card"><div class="card-header"><div><div class="card-title">Danh sách Khách hàng</div><div class="card-sub" id="kh-count">0 khách hàng</div></div></div><div class="table-wrap"><table class="dt" style="min-width:500px"><thead><tr><th>Khách hàng</th><th>Loại</th><th>Điện thoại</th><th>Tổng HĐ</th><th>Doanh số</th><th></th></tr></thead><tbody id="kh-body"></tbody></table></div></div>
     </div>
     <div class="page" id="page-xe">
-      <div class="tab-bar" style="margin-bottom:18px"><button class="tab active" onclick="switchXeTab('xe',this)">🚌 Xe</button><button class="tab" onclick="switchXeTab('taixe',this)">🧑‍✈️ Tài xế</button></div>
+      <div class="tab-bar" style="margin-bottom:18px">
+        <button class="tab active" onclick="switchXeTab('xe',this)">🚌 Xe <span id="count-xe" style="background:rgba(0,0,0,.08);border-radius:20px;padding:1px 7px;font-size:.72rem;margin-left:2px">0</span></button>
+        <button class="tab" onclick="switchXeTab('taixe',this)">🧑‍✈️ Tài xế <span id="count-tx" style="background:rgba(0,0,0,.08);border-radius:20px;padding:1px 7px;font-size:.72rem;margin-left:2px">0</span></button>
+      </div>
       <div id="xe-panel"><div class="xe-grid" id="xe-grid"></div></div>
       <div id="taixe-panel" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Danh sách Tài xế</div><div class="card-sub">Hiệu suất tháng 4/2026</div></div></div><div class="table-wrap"><table class="dt" style="min-width:560px"><thead><tr><th>Tài xế</th><th>CMND</th><th>Bằng lái</th><th>Số chuyến T4</th><th>Doanh thu T4</th><th>Lương CB</th><th></th></tr></thead><tbody id="taixe-body"></tbody></table></div></div></div>
     </div>
@@ -416,6 +419,11 @@ function updateBadges(){
   var xeBadge=document.getElementById('xeBadge');
   xeBadge.textContent=totalXe;
   xeBadge.style.display=totalXe?'':'none';
+  // Cập nhật số trong tab bar
+  var cxe=document.getElementById('count-xe');
+  var ctx=document.getElementById('count-tx');
+  if(cxe)cxe.textContent=DB.xe.length;
+  if(ctx)ctx.textContent=DB.taiXe.length;
 }
 
 // ═══════════════════════════════════════
