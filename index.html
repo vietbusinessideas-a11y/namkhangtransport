@@ -408,7 +408,11 @@ function navTo(page){
   renderCurrentPage();
 }
 function renderCurrentPage(){var fns={dashboard:renderDashboard,hopdong:renderHD,khachhang:renderKH,xe:renderXe,thuchi:renderTCAll,baocao:renderBC};if(fns[currentPage])fns[currentPage]();}
-function updateBadges(){var active=DB.hopDong.filter(function(h){return h.tt==='dang_chay'||h.tt==='cho_thanh_toan';}).length;document.getElementById('hdBadge').textContent=active;}
+function updateBadges(){
+  var active=DB.hopDong.filter(function(h){return h.tt!=='hoan_thanh';}).length;
+  document.getElementById('hdBadge').textContent=active;
+  document.getElementById('hdBadge').style.display=active?'':'none';
+}
 
 // ═══════════════════════════════════════
 // DASHBOARD
