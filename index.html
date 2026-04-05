@@ -1333,21 +1333,30 @@ document.addEventListener('click',e=>{
   }catch{window.location.replace('/login');}
 })();
 
-// INIT
-document.addEventListener('DOMContentLoaded',()=>{
-  document.querySelectorAll('.nav-item[data-page]').forEach(n=>n.addEventListener('click',()=>navTo(n.dataset.page)));
+// INIT - phải nằm CUỐI CÙNG, sau khi tất cả hàm đã định nghĩa
+document.addEventListener('DOMContentLoaded', function(){
+  // Gắn nav
+  document.querySelectorAll('.nav-item[data-page]').forEach(function(n){
+    n.addEventListener('click', function(){ navTo(n.dataset.page); });
+  });
 
-  document.querySelector('.user-card').title='Nhấn để đăng xuất';
-  document.querySelector('.user-card').onclick=()=>{
-    if(confirm('Đăng xuất khỏi hệ thống?')){
-      localStorage.removeItem('nk_session_v3');
-      window.location.replace('/login.html');
-    }
-  };
+  // Đăng xuất
+  var userCard = document.querySelector('.user-card');
+  if(userCard){
+    userCard.title = 'Nhấn để đăng xuất';
+    userCard.onclick = function(){
+      if(confirm('Đăng xuất khỏi hệ thống?')){
+        localStorage.removeItem('nk_session_v3');
+        window.location.replace('/login.html');
+      }
+    };
+  }
 
-  if(initAuth()){
+  // Chạy auth check — nếu ok thì load data
+  var ok = initAuth();
+  if(ok){
     loadDB();
-    setTimeout(renderNotifPanel,1500);
+    setTimeout(renderNotifPanel, 1500);
   }
 });
 </script>
