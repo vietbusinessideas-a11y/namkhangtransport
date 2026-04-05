@@ -216,17 +216,67 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="page" id="page-baocao">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
-        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div class="period-tabs"><button class="ptab active" onclick="setBCPeriod('thang',this)">Tháng</button><button class="ptab" onclick="setBCPeriod('quy',this)">Quý</button><button class="ptab" onclick="setBCPeriod('nam',this)">Năm</button></div><span style="font-size:.78rem;color:var(--text3)">Đang xem: <strong id="bc-period-lbl">Tháng 4/2026</strong></span></div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div class="period-tabs">
+            <button class="ptab active" onclick="setBCPeriod('thang',this)">Tháng</button>
+            <button class="ptab" onclick="setBCPeriod('quy',this)">Quý</button>
+            <button class="ptab" onclick="setBCPeriod('nam',this)">Năm</button>
+          </div>
+          <span style="font-size:.78rem;color:var(--text3)">Đang xem: <strong id="bc-period-lbl">Tháng 4/2026</strong></span>
+        </div>
         <button class="btn btn-green" onclick="exportExcel()">📊 Xuất Excel</button>
       </div>
-      <div class="kpi-grid" id="bc-kpi"></div>
-      <div class="chart-row">
-        <div class="chart-card"><div class="chart-title">Xu hướng Doanh thu & Chi phí</div><div class="chart-sub" id="bc-chart-sub">6 tháng gần nhất</div><div class="legend"><div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>Doanh thu</div><div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>Chi phí</div><div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Lợi nhuận</div></div><div class="bar-wrap" id="bc-bar"></div></div>
-        <div class="chart-card"><div class="chart-title">Cơ cấu chi phí</div><div class="chart-sub">Phân bổ danh mục</div><div class="donut-wrap"><div class="donut" id="bc-donut"><div class="donut-hole"><div class="donut-pct" id="bc-donut-val">0</div><div class="donut-lbl">Tổng chi</div></div></div><div class="donut-legend" id="bc-donut-legend"></div></div></div>
+
+      <!-- Tab bar BC -->
+      <div class="tab-bar" style="margin-bottom:20px">
+        <button class="tab active" onclick="switchBCTab('tongquan',this)">📊 Tổng quan</button>
+        <button class="tab" onclick="switchBCTab('hopdong',this)">📋 Theo hợp đồng</button>
       </div>
-      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-bottom:16px">
-        <div class="card"><div class="card-header"><div><div class="card-title">Hiệu suất từng xe</div><div class="card-sub" id="bc-xe-sub">Tháng 4/2026</div></div></div><div class="table-wrap"><table class="dt" style="min-width:420px"><thead><tr><th>Xe</th><th>Doanh thu</th><th>Chi phí</th><th>Lợi nhuận</th><th>Tỷ suất</th></tr></thead><tbody id="bc-xe-table"></tbody></table></div></div>
-        <div class="card"><div class="card-header"><div class="card-title">Top Tài xế</div></div><div id="bc-driver-rank"></div></div>
+
+      <!-- TỔNG QUAN -->
+      <div id="bc-panel-tongquan">
+        <div class="kpi-grid" id="bc-kpi"></div>
+        <div class="chart-row">
+          <div class="chart-card"><div class="chart-title">Xu hướng Doanh thu & Chi phí</div><div class="chart-sub" id="bc-chart-sub">6 tháng gần nhất</div><div class="legend"><div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>Doanh thu</div><div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>Chi phí</div><div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Lợi nhuận</div></div><div class="bar-wrap" id="bc-bar"></div></div>
+          <div class="chart-card"><div class="chart-title">Cơ cấu chi phí</div><div class="chart-sub">Phân bổ danh mục</div><div class="donut-wrap"><div class="donut" id="bc-donut"><div class="donut-hole"><div class="donut-pct" id="bc-donut-val">0</div><div class="donut-lbl">Tổng chi</div></div></div><div class="donut-legend" id="bc-donut-legend"></div></div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-bottom:16px">
+          <div class="card"><div class="card-header"><div><div class="card-title">Hiệu suất từng xe</div><div class="card-sub" id="bc-xe-sub">Tháng 4/2026</div></div></div><div class="table-wrap"><table class="dt" style="min-width:420px"><thead><tr><th>Xe</th><th>Doanh thu</th><th>Chi phí</th><th>Lợi nhuận</th><th>Tỷ suất</th></tr></thead><tbody id="bc-xe-table"></tbody></table></div></div>
+          <div class="card"><div class="card-header"><div class="card-title">Top Tài xế</div></div><div id="bc-driver-rank"></div></div>
+        </div>
+      </div>
+
+      <!-- THEO HỢP ĐỒNG -->
+      <div id="bc-panel-hopdong" style="display:none">
+        <div class="kpi-grid" id="bc-hd-kpi"></div>
+        <div class="toolbar">
+          <div class="search-box"><span class="search-icon">🔍</span><input type="text" id="bc-hd-search" placeholder="Tìm hợp đồng..." oninput="renderBCHopDong()"></div>
+          <select class="sel" id="bc-hd-tt" onchange="renderBCHopDong()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="hoan_thanh">Hoàn thành</option>
+            <option value="dang_chay">Đang thực hiện</option>
+            <option value="cho_thanh_toan">Chờ thanh toán</option>
+            <option value="cho_xe">Chờ thực hiện</option>
+          </select>
+          <select class="sel" id="bc-hd-sort" onchange="renderBCHopDong()">
+            <option value="ln_desc">Lợi nhuận cao → thấp</option>
+            <option value="ln_asc">Lợi nhuận thấp → cao</option>
+            <option value="gt_desc">Giá trị cao → thấp</option>
+            <option value="ngay_desc">Mới nhất</option>
+          </select>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div><div class="card-title">Lợi nhuận theo Hợp đồng</div><div class="card-sub" id="bc-hd-count">0 hợp đồng</div></div>
+            <div id="bc-hd-summary" style="font-size:.75rem;font-weight:600;display:flex;gap:10px;align-items:center"></div>
+          </div>
+          <div class="table-wrap">
+            <table class="dt" style="min-width:760px">
+              <thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến đường</th><th>Ngày</th><th>Doanh thu</th><th>Chi phí HĐ</th><th>Lợi nhuận</th><th>Tỷ suất</th><th>Trạng thái</th></tr></thead>
+              <tbody id="bc-hd-body"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
     <div class="page" id="page-caidat">
@@ -740,7 +790,83 @@ function deleteTC(id){
 // ═══════════════════════════════════════
 // BÁO CÁO
 // ═══════════════════════════════════════
-var bcPeriod='thang';
+var bcTab='tongquan';
+function switchBCTab(t,el){
+  bcTab=t;
+  document.querySelectorAll('#page-baocao .tab').forEach(function(b){b.classList.remove('active');});
+  el.classList.add('active');
+  document.getElementById('bc-panel-tongquan').style.display=t==='tongquan'?'':'none';
+  document.getElementById('bc-panel-hopdong').style.display=t==='hopdong'?'':'none';
+  if(t==='hopdong')renderBCHopDong();
+}
+
+function renderBCHopDong(){
+  var q=(document.getElementById('bc-hd-search').value||'').toLowerCase();
+  var tt=document.getElementById('bc-hd-tt').value;
+  var sort=document.getElementById('bc-hd-sort').value;
+
+  // Tính lợi nhuận từng HĐ: doanh thu = da_thu, chi = thu_chi có hd_id khớp type=chi
+  var rows=DB.hopDong.map(function(h){
+    var chiHD=DB.thuChi.filter(function(t){return t.type==='chi'&&t.hd_id===h.id;}).reduce(function(s,t){return s+t.sotien;},0);
+    var doanhThu=h.dathu;
+    var ln=doanhThu-chiHD;
+    var ts=doanhThu>0?Math.round(ln/doanhThu*100):0;
+    return Object.assign({},h,{chiHD:chiHD,doanhThu:doanhThu,ln:ln,ts:ts});
+  });
+
+  // Filter
+  rows=rows.filter(function(h){
+    var sq=!q||[h.so,h.kh,h.tuyen].join(' ').toLowerCase().includes(q);
+    var st=!tt||h.tt===tt;
+    return sq&&st;
+  });
+
+  // Sort
+  rows.sort(function(a,b){
+    if(sort==='ln_desc')return b.ln-a.ln;
+    if(sort==='ln_asc')return a.ln-b.ln;
+    if(sort==='gt_desc')return b.giatri-a.giatri;
+    return b.ngay.localeCompare(a.ngay);
+  });
+
+  // KPI tổng
+  var tongThu=rows.reduce(function(s,h){return s+h.doanhThu;},0);
+  var tongChi=rows.reduce(function(s,h){return s+h.chiHD;},0);
+  var tongLN=tongThu-tongChi;
+  var tongGT=rows.reduce(function(s,h){return s+h.giatri;},0);
+  var tongConLai=tongGT-tongThu;
+
+  document.getElementById('bc-hd-kpi').innerHTML=[
+    {cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Tổng đã thu',val:fmtM(tongThu),sub:rows.length+' hợp đồng'},
+    {cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Tổng chi phí HĐ',val:fmtM(tongChi),sub:'Chi có liên kết HĐ'},
+    {cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận HĐ',val:fmtM(tongLN),sub:tongThu>0?((tongLN/tongThu*100).toFixed(1)+'% tỷ suất'):''},
+    {cls:'c-orange',ic:'ic-orange',ico:'⏳',lbl:'Công nợ còn lại',val:fmtM(tongConLai),sub:'Chưa thu'},
+  ].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':c.cls==='c-blue'?'accent':'orange';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
+
+  document.getElementById('bc-hd-count').textContent=rows.length+' hợp đồng';
+  document.getElementById('bc-hd-summary').innerHTML=
+    '<span style="color:var(--green)">↑ '+fmtM(tongThu)+'</span>'+
+    '<span style="color:var(--border)">|</span>'+
+    '<span style="color:var(--red)">↓ '+fmtM(tongChi)+'</span>'+
+    '<span style="color:var(--border)">|</span>'+
+    '<span style="color:var(--accent);font-weight:700">= '+fmtM(tongLN)+'</span>';
+
+  document.getElementById('bc-hd-body').innerHTML=rows.length?rows.map(function(h){
+    var tsColor=h.ts>=30?'var(--green)':h.ts>=15?'var(--accent)':h.ts>=0?'var(--orange)':'var(--red)';
+    var barW=Math.min(100,Math.max(0,h.ts));
+    return'<tr onclick="openHDDetail(\''+h.id+'\')" style="cursor:pointer">'+
+      '<td><span class="mono" style="font-weight:600">'+h.so+'</span></td>'+
+      '<td style="font-weight:500">'+h.kh+'</td>'+
+      '<td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td>'+
+      '<td><span class="mono">'+fmtD(h.ngay)+'</span></td>'+
+      '<td><span class="amt-pos">+'+fmt(h.doanhThu)+'</span>'+(h.giatri>h.dathu?'<div style="font-size:.67rem;color:var(--orange)">GT: '+fmtM(h.giatri)+'</div>':'')+'</td>'+
+      '<td>'+(h.chiHD>0?'<span class="amt-neg">-'+fmt(h.chiHD)+'</span>':'<span style="color:var(--text3)">—</span>')+'</td>'+
+      '<td><span style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+( h.ln>=0?'+':'')+fmt(h.ln)+'</span></td>'+
+      '<td><div style="display:flex;align-items:center;gap:6px"><div style="width:50px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+tsColor+';border-radius:3px"></div></div><span style="font-size:.72rem;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+h.ts+'%</span></div></td>'+
+      '<td>'+(TTMAP[h.tt]||'')+'</td>'+
+    '</tr>';
+  }).join(''):'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Không có hợp đồng nào</td></tr>';
+}
 var BC={
   thang:{lbl:'Tháng 4/2026',sub:'6 tháng gần nhất',bars:[{l:'T11',thu:95,chi:67},{l:'T12',thu:110,chi:75},{l:'T1',thu:85,chi:62},{l:'T2',thu:98,chi:68},{l:'T3',thu:114,chi:72},{l:'T4',thu:128.5,chi:74.2,cur:true}]},
   quy:{lbl:'Quý 1/2026',sub:'6 quý gần nhất',bars:[{l:"Q2'24",thu:210,chi:160},{l:"Q3'24",thu:230,chi:168},{l:"Q4'24",thu:248,chi:180},{l:"Q1'25",thu:255,chi:185},{l:"Q2'25",thu:265,chi:195},{l:"Q1'26",thu:297.5,chi:202,cur:true}]},
