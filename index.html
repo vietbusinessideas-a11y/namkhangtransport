@@ -653,51 +653,96 @@ const LOAIBADGE={'Thu hợp đồng':'b-green','Đặt cọc':'b-green','Thu kh�
 function badgeHTML(loai,type){const cls=LOAIBADGE[loai]||(type==='thu'?'b-green':'b-orange');return`<span class="badge ${cls}">${loai}</span>`;}
 
 async function loadDB(){
-  // Hiển thị dữ liệu mẫu trước để UI không trắng
+  // Hiển thị mẫu trước
   DB={hopDong:[...DEFAULT_HD],thuChi:[...DEFAULT_TC],xe:[...DEFAULT_XE],taiXe:[...DEFAULT_TX],khachHang:[...DEFAULT_KH]};
   updateBadges();
   renderCurrentPage();
 
-  // Fetch Supabase song song
   try{
+    // Test kết nối trước
+    const testR=await fetch(`${SB_URL}/rest/v1/xe?limit=1`,{headers:SB_H});
+    if(!testR.ok){
+      const txt=await testR.text();
+      throw new Error(`HTTP ${testR.status}: ${txt}`);
+    }
+
     const[hd,tc,xe,tx,kh]=await Promise.all([
-      sbSelect('hop_dong','order=created_at.desc'),
-      sbSelect('thu_chi','order=ngay_gd.desc'),
-      sbSelect('xe','order=bien_so.asc'),
-      sbSelect('tai_xe','order=ho_ten.asc'),
-      sbSelect('khach_hang','order=ten.asc'),
+      sbSelect('hop_dong','order=id.desc'),
+      sbSelect('thu_chi','order=id.desc'),
+      sbSelect('xe','order=id.asc'),
+      sbSelect('tai_xe','order=id.asc'),
+      sbSelect('khach_hang','order=id.asc'),
     ]);
-    DB.hopDong=hd.length?hd.map(r=>({
-      id:r.id,so:r.so_hd||'',kh:r.khach_hang||'',tuyen:r.tuyen_duong||'',
-      ngay:r.ngay_th||'',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',
-      giatri:r.gia_tri||0,dathu:r.da_thu||0,tt:r.trang_thai||'cho_xe'
-    })):[...DEFAULT_HD];
-    DB.thuChi=tc.length?tc.map(r=>({
-      id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',
-      gio:r.gio_gd||'00:00',sotien:r.so_tien||0,hd:r.hd_so||'',
-      httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',
-      kh:r.doi_tac||'',mota:r.mo_ta||''
-    })):[...DEFAULT_TC];
-    DB.xe=xe.length?xe.map(r=>({
-      id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:r.nam_sx||0,
-      km:r.km_chay||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',
-      tt:r.trang_thai||'san_sang'
-    })):[...DEFAULT_XE];
-    DB.taiXe=tx.length?tx.map(r=>({
-      id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',
-      sdt:r.so_dt||'',luong:r.luong_cb||0,chuyen:0,doanhThu:0
-    })):[...DEFAULT_TX];
-    DB.khachHang=kh.length?kh.map(r=>({
-      id:r.id,ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',
-      hdCount:0,doanhSo:0
-    })):[...DEFAULT_KH];
+
+    console.log('Supabase data:',{hd,tc,xe,tx,kh});
+
+    if(hd.length) DB.hopDong=hd.map(r=>({
+      id:r.id,
+      so:r.so_hd||r.so||'',
+      kh:r.khach_hang||r.kh||'',
+      tuyen:r.tuyen_duong||r.tuyen||'',
+      ngay:r.ngay_th||r.ngay||'',
+      xe:r.bien_so_xe||r.xe||'',
+      taixe:r.tai_xe||r.taixe||'',
+      giatri:Number(r.gia_tri||r.giatri||0),
+      dathu:Number(r.da_thu||r.dathu||0),
+      tt:r.trang_thai||r.tt||'cho_xe'
+    }));
+
+    if(tc.length) DB.thuChi=tc.map(r=>({
+      id:r.id,
+      type:r.loai_gd||r.type||'thu',
+      loai:r.danh_muc||r.loai||'',
+      ngay:r.ngay_gd||r.ngay||'',
+      gio:r.gio_gd||r.gio||'00:00',
+      sotien:Number(r.so_tien||r.sotien||0),
+      hd:r.hd_so||r.hd||'',
+      httt:r.hinh_thuc||r.httt||'Tiền mặt',
+      xe:r.bien_so_xe||r.xe||'',
+      taixe:r.tai_xe||r.taixe||'',
+      kh:r.doi_tac||r.kh||'',
+      mota:r.mo_ta||r.mota||''
+    }));
+
+    if(xe.length) DB.xe=xe.map(r=>({
+      id:r.id,
+      bien:r.bien_so||r.bien||'',
+      loai:r.loai_xe||r.loai||'',
+      nam:Number(r.nam_sx||r.nam||0),
+      km:Number(r.km_chay||r.km||0),
+      dangKiem:r.han_dk||r.dangKiem||'',
+      baoHiem:r.han_bh||r.baoHiem||'',
+      tt:r.trang_thai||r.tt||'san_sang'
+    }));
+
+    if(tx.length) DB.taiXe=tx.map(r=>({
+      id:r.id,
+      ten:r.ho_ten||r.ten||'',
+      cmnd:r.cmnd||'',
+      bangLai:r.bang_lai||r.bangLai||'',
+      sdt:r.so_dt||r.sdt||'',
+      luong:Number(r.luong_cb||r.luong||0),
+      chuyen:0,
+      doanhThu:0
+    }));
+
+    if(kh.length) DB.khachHang=kh.map(r=>({
+      id:r.id,
+      ten:r.ten||'',
+      loai:r.loai||'',
+      sdt:r.so_dt||r.sdt||'',
+      hdCount:Number(r.hd_count||0),
+      doanhSo:Number(r.doanh_so||0)
+    }));
+
     toast('☁️ Dữ liệu từ Supabase','success');
+    updateBadges();
+    renderCurrentPage();
+
   }catch(err){
-    console.error('Supabase error:',err);
-    toast('⚠️ Dùng dữ liệu mẫu: '+err.message,'info');
+    console.error('❌ Supabase lỗi:',err.message);
+    toast('⚠️ '+err.message,'error');
   }
-  updateBadges();
-  renderCurrentPage();
 }
 
 let currentPage='dashboard';
