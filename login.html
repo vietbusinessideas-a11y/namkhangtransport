@@ -347,7 +347,8 @@ async function doLogin() {
 
   if (loggedIn) {
     toast(`✅ Xin chào! Đang chuyển trang...`, 'success');
-    setTimeout(() => { window.location.href = '/'; }, 800);
+   // MỚI - trỏ thẳng file
+setTimeout(() => { window.location.href = '/index.html'; }, 800);
   }
 
   setBtnLoading('loginBtn', false, '<span>🔑</span><span>Đăng nhập</span>');
