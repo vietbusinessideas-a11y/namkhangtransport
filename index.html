@@ -157,7 +157,7 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
   <nav class="sidebar-nav">
     <div class="nav-section"><span class="nav-label">Tổng quan</span><div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>Dashboard</div></div>
     <div class="nav-section"><span class="nav-label">Nghiệp vụ</span><div class="nav-item" data-page="hopdong"><span class="icon">📋</span>Hợp đồng<span class="nav-badge" id="hdBadge">0</span></div><div class="nav-item" data-page="khachhang"><span class="icon">👥</span>Khách hàng</div></div>
-    <div class="nav-section"><span class="nav-label">Phương tiện</span><div class="nav-item" data-page="xe"><span class="icon">🚌</span>Xe & Tài xế</div></div>
+    <div class="nav-section"><span class="nav-label">Phương tiện</span><div class="nav-item" data-page="xe"><span class="icon">🚌</span>Xe & Tài xế<span class="nav-badge" id="xeBadge">0</span></div></div>
     <div class="nav-section"><span class="nav-label">Tài chính</span><div class="nav-item" data-page="thuchi"><span class="icon">💸</span>Thu Chi</div><div class="nav-item" data-page="baocao"><span class="icon">📈</span>Báo cáo</div></div>
     <div class="nav-section"><span class="nav-label">Hệ thống</span><div class="nav-item" data-page="caidat"><span class="icon">⚙️</span>Cài đặt</div></div>
   </nav>
@@ -412,6 +412,10 @@ function updateBadges(){
   var active=DB.hopDong.filter(function(h){return h.tt!=='hoan_thanh';}).length;
   document.getElementById('hdBadge').textContent=active;
   document.getElementById('hdBadge').style.display=active?'':'none';
+  var totalXe=DB.xe.length;
+  var xeBadge=document.getElementById('xeBadge');
+  xeBadge.textContent=totalXe;
+  xeBadge.style.display=totalXe?'':'none';
 }
 
 // ═══════════════════════════════════════
