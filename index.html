@@ -692,7 +692,7 @@ function openTCDetail(id){var t=DB.thuChi.find(function(x){return x.id===id;});i
 function openTCModal(type){
   var isThu=type==='thu';
   var loaiOpts=isThu?'<option>Thu hợp đồng</option><option>Đặt cọc</option><option>Thu khác</option>':'<option>Nhiên liệu</option><option>Lương tài xế</option><option>Sửa chữa</option><option>Cầu đường</option><option>Bảo dưỡng</option><option>Khác</option>';
-  var hdOpts='<option value="">—</option>'+DB.hopDong.map(function(h){return'<option>'+h.so+'</option>';}).join('');
+  var hdOpts='<option value="">—</option>'+DB.hopDong.map(function(h){return'<option value="'+h.id+'">'+h.so+' · '+h.kh+'</option>';}).join('');
   var xeOpts='<option value="">—</option>'+DB.xe.map(function(x){return'<option>'+x.bien+'</option>';}).join('');
   var txOpts='<option value="">—</option>'+DB.taiXe.map(function(t){return'<option>'+t.ten+'</option>';}).join('');
   var today=new Date().toISOString().slice(0,10);
@@ -711,8 +711,11 @@ function saveTC(type){
   var raw=document.getElementById('f-sotien').value.replace(/[.,\s]/g,'');
   var sotien=parseInt(raw);
   if(!sotien||sotien<=0){toast('Nhập số tiền hợp lệ!','error');return;}
-  var obj={id:uid(),type:type,loai:document.getElementById('f-loai').value,ngay:document.getElementById('f-ngay').value,gio:document.getElementById('f-gio').value,sotien:sotien,hd:document.getElementById('f-hd').value,httt:document.getElementById('f-httt').value,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,kh:document.getElementById('f-kh').value,mota:document.getElementById('f-mota').value};
-  var row={loai_gd:type,danh_muc:obj.loai,ngay_gd:obj.ngay,gio_gd:obj.gio,so_tien:sotien,hd_id:obj.hd,hinh_thuc:obj.httt,bien_so_xe:obj.xe,tai_xe:obj.taixe,doi_tac:obj.kh,mo_ta:obj.mota};
+  var hdId=document.getElementById('f-hd').value||null;
+  var hdSo='';
+  if(hdId){var foundHD=DB.hopDong.find(function(h){return h.id===hdId;});hdSo=foundHD?foundHD.so:'';}
+  var obj={id:uid(),type:type,loai:document.getElementById('f-loai').value,ngay:document.getElementById('f-ngay').value,gio:document.getElementById('f-gio').value,sotien:sotien,hd:hdSo,hd_id:hdId,httt:document.getElementById('f-httt').value,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,kh:document.getElementById('f-kh').value,mota:document.getElementById('f-mota').value};
+  var row={loai_gd:type,danh_muc:obj.loai,ngay_gd:obj.ngay,gio_gd:obj.gio,so_tien:sotien,hd_id:hdId,hinh_thuc:obj.httt,bien_so_xe:obj.xe||null,tai_xe:obj.taixe||null,doi_tac:obj.kh||null,mo_ta:obj.mota||null};
   sbPost('thu_chi',row).then(function(res){
     if(res&&res[0]&&res[0].id)obj.id=res[0].id;
     DB.thuChi.unshift(obj);closeModal();renderTCAll();toast('✅ Đã ghi '+(type==='thu'?'thu':'chi')+': '+fmt(sotien)+' ₫','success');
