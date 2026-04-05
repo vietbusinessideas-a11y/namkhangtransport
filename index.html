@@ -976,7 +976,8 @@ function buildNotifs(){
     if(x.baoHiem&&d2<=60)items.push({id:'bh_'+x.id,type:d2<=7?'urgent':d2<=30?'warn':'info',ico:d2<=7?'🚨':'🛡️',title:'Bảo hiểm sắp hết hạn',body:x.bien+' — còn '+(d2<=0?'đã hết hạn!':d2+' ngày'),tag:'Bảo hiểm',page:'xe',ts:d2});
   });
   DB.hopDong.filter(function(h){return h.giatri>h.dathu&&h.tt!=='cho_xe';}).forEach(function(h){items.push({id:'cn_'+h.id,type:h.giatri-h.dathu>20e6?'warn':'info',ico:'💰',title:'Công nợ chưa thu',body:h.so+' · '+h.kh+' — còn '+fmtM(h.giatri-h.dathu),tag:'Công nợ',page:'hopdong',ts:999});});
-  return items.sort(function(a,b){return a.ts-b.ts;});
+  // Lọc bỏ đã đọc
+  return items.filter(function(i){return!readIds.has(i.id);}).sort(function(a,b){return a.ts-b.ts;});
 }
 function renderNotifPanel(){
   var items=buildNotifs();
