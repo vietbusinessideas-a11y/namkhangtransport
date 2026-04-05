@@ -230,7 +230,19 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
       </div>
     </div>
     <div class="page" id="page-caidat">
-      <div class="card" style="max-width:560px"><div class="card-header"><div class="card-title">⚙️ Thông tin công ty</div></div><div class="modal-body"><div class="fg"><label class="fl">Tên công ty</label><input class="fc" value="Công ty TNHH Nam Khang Transport"></div><div class="fg"><label class="fl">Mã số thuế</label><input class="fc" value="0123456789"></div><div class="form-row"><div class="fg"><label class="fl">Điện thoại</label><input class="fc" value="0908 123 456"></div><div class="fg"><label class="fl">Email</label><input class="fc" value="contact@namkhang.vn"></div></div><div class="fg"><label class="fl">Địa chỉ</label><input class="fc" value="123 Nguyễn Văn Linh, Q.7, TP.HCM"></div><button class="btn btn-accent" onclick="toast('Đã lưu thông tin!','success')">💾 Lưu thay đổi</button></div></div>
+      <div class="card" style="max-width:560px">
+        <div class="card-header"><div class="card-title">⚙️ Thông tin công ty</div></div>
+        <div class="modal-body">
+          <div class="fg"><label class="fl">Tên công ty</label><input class="fc" id="cd-ten" placeholder="Tên công ty"></div>
+          <div class="fg"><label class="fl">Mã số thuế</label><input class="fc" id="cd-mst" placeholder="Mã số thuế"></div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Điện thoại</label><input class="fc" id="cd-sdt" placeholder="Số điện thoại"></div>
+            <div class="fg"><label class="fl">Email</label><input class="fc" id="cd-email" placeholder="Email"></div>
+          </div>
+          <div class="fg"><label class="fl">Địa chỉ</label><input class="fc" id="cd-diachi" placeholder="Địa chỉ"></div>
+          <button class="btn btn-accent" onclick="saveCaiDat()">💾 Lưu thay đổi</button>
+        </div>
+      </div>
     </div>
   </div>
 </main>
@@ -422,7 +434,7 @@ function navTo(page){
   if(window.innerWidth<768)closeSidebar();
   renderCurrentPage();
 }
-function renderCurrentPage(){var fns={dashboard:renderDashboard,hopdong:renderHD,khachhang:renderKH,xe:renderXe,thuchi:renderTCAll,baocao:renderBC};if(fns[currentPage])fns[currentPage]();}
+function renderCurrentPage(){var fns={dashboard:renderDashboard,hopdong:renderHD,khachhang:renderKH,xe:renderXe,thuchi:renderTCAll,baocao:renderBC,caidat:loadCaiDat};if(fns[currentPage])fns[currentPage]();}
 function updateBadges(){
   var active=DB.hopDong.filter(function(h){return h.tt!=='hoan_thanh';}).length;
   document.getElementById('hdBadge').textContent=active;
@@ -796,8 +808,32 @@ function markAllRead(){buildNotifs().forEach(function(it){readIds.add(it.id);});
 document.addEventListener('click',function(e){var p=document.getElementById('notifPanel');var btn=document.getElementById('notifBtn');if(p&&p.style.display!=='none'&&!p.contains(e.target)&&btn&&!btn.contains(e.target))closeNotifPanel();});
 
 // ═══════════════════════════════════════
-// XUẤT EXCEL
+// CÀI ĐẶT CÔNG TY
 // ═══════════════════════════════════════
+var CD_KEY='nk_caidat_v1';
+var DEFAULT_CD={ten:'Công ty TNHH Nam Khang Transport',mst:'0123456789',sdt:'0908 123 456',email:'contact@namkhang.vn',diachi:'123 Nguyễn Văn Linh, Q.7, TP.HCM'};
+
+function loadCaiDat(){
+  var cd=DEFAULT_CD;
+  try{var raw=localStorage.getItem(CD_KEY);if(raw)cd=Object.assign({},DEFAULT_CD,JSON.parse(raw));}catch(e){}
+  document.getElementById('cd-ten').value=cd.ten||'';
+  document.getElementById('cd-mst').value=cd.mst||'';
+  document.getElementById('cd-sdt').value=cd.sdt||'';
+  document.getElementById('cd-email').value=cd.email||'';
+  document.getElementById('cd-diachi').value=cd.diachi||'';
+}
+
+function saveCaiDat(){
+  var cd={
+    ten:document.getElementById('cd-ten').value.trim(),
+    mst:document.getElementById('cd-mst').value.trim(),
+    sdt:document.getElementById('cd-sdt').value.trim(),
+    email:document.getElementById('cd-email').value.trim(),
+    diachi:document.getElementById('cd-diachi').value.trim(),
+  };
+  try{localStorage.setItem(CD_KEY,JSON.stringify(cd));toast('✅ Đã lưu thông tin công ty!','success');}
+  catch(e){toast('❌ Không thể lưu: '+e.message,'error');}
+}
 function exportExcel(){
   showModal('📊 Xuất Excel','Chọn dữ liệu muốn xuất',
     '<div style="display:flex;flex-direction:column;gap:10px">'+
