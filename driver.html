@@ -119,11 +119,18 @@
 
     <!-- Logo & title -->
     <div class="flex flex-col items-center mt-10 mb-2">
-      <div style="width:72px;height:72px;background:rgba(255,255,255,.15);border-radius:20px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;backdrop-filter:blur(8px)">
-        <span style="font-size:36px">🚌</span>
+      <img src="https://raw.githubusercontent.com/vietbusinessideas-a11y/namkhangtransport/main/NKTLogo(nuoc%20bien-dung).png"
+           alt="Nam Khang Transport"
+           style="width:200px;max-width:70vw;height:auto;object-fit:contain;
+                  filter:brightness(0) invert(1) drop-shadow(0 2px 12px rgba(0,0,0,.25));
+                  margin-bottom:14px">
+      <div style="font-size:.8rem;font-weight:600;color:rgba(255,255,255,.75);
+                  letter-spacing:1.5px;text-transform:uppercase;
+                  background:rgba(255,255,255,.12);backdrop-filter:blur(8px);
+                  border:1px solid rgba(255,255,255,.2);
+                  padding:5px 16px;border-radius:20px">
+        🚌 Cổng thông tin Tài xế
       </div>
-      <div style="font-size:1.4rem;font-weight:800;color:#fff;letter-spacing:-.5px">Nam Khang Transport</div>
-      <div style="font-size:.82rem;color:rgba(255,255,255,.7);margin-top:4px">Cổng thông tin Tài xế</div>
     </div>
 
     <!-- Login card -->
@@ -178,17 +185,31 @@
 <div id="screen-app" class="screen" style="background:#f5f4f0;">
 
   <!-- ── HEADER ── -->
-  <div style="background:#fff;border-bottom:1px solid #e4e0d8;padding:0 20px;position:sticky;top:0;z-index:50" class="pt-safe">
-    <div style="display:flex;align-items:center;justify-content:space-between;height:56px">
+  <div style="background:linear-gradient(135deg,#1e40af,#2563eb);position:sticky;top:0;z-index:50;
+              box-shadow:0 2px 12px rgba(37,99,235,.3)" class="pt-safe">
+    <!-- Logo bar -->
+    <div style="display:flex;align-items:center;justify-content:center;padding:10px 20px 6px;gap:10px;border-bottom:1px solid rgba(255,255,255,.12)">
+      <img src="https://raw.githubusercontent.com/vietbusinessideas-a11y/namkhangtransport/main/NKTLogo(nuoc%20bien-dung).png"
+           alt="Nam Khang Transport"
+           style="height:28px;width:auto;object-fit:contain;filter:brightness(0) invert(1)">
+      <div style="width:1px;height:18px;background:rgba(255,255,255,.25)"></div>
+      <span style="font-size:.7rem;font-weight:600;color:rgba(255,255,255,.8);letter-spacing:.8px;text-transform:uppercase">Cổng thông tin Tài xế</span>
+    </div>
+    <!-- Driver info bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;height:50px;padding:0 16px">
       <div style="display:flex;align-items:center;gap:10px">
         <div id="hdr-avatar"
-          style="width:36px;height:36px;background:linear-gradient(135deg,#2563eb,#3b82f6);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.82rem;font-weight:700;flex-shrink:0">TX</div>
+          style="width:34px;height:34px;background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.4);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.78rem;font-weight:700;flex-shrink:0">TX</div>
         <div>
-          <div id="hdr-name" style="font-size:.88rem;font-weight:700;line-height:1.2">Tài xế</div>
-          <div id="hdr-xe" style="font-size:.68rem;color:#a09c96">Chờ phân công</div>
+          <div id="hdr-name" style="font-size:.85rem;font-weight:700;line-height:1.2;color:#fff">Tài xế</div>
+          <div id="hdr-xe" style="font-size:.65rem;color:rgba(255,255,255,.65)">Chờ phân công</div>
         </div>
       </div>
-      <button onclick="doLogout()" style="background:none;border:1px solid #e4e0d8;border-radius:8px;padding:6px 12px;font-size:.72rem;font-weight:600;color:#6b6760;cursor:pointer">Đăng xuất</button>
+      <button onclick="doLogout()"
+        style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:8px;
+               padding:6px 12px;font-size:.7rem;font-weight:600;color:rgba(255,255,255,.85);cursor:pointer">
+        Đăng xuất
+      </button>
     </div>
   </div>
 
