@@ -490,6 +490,7 @@ var SB_URL = '', SB_KEY = '';
 var SESSION = null;         // { driver:{...}, xe:'...', loginTime:Date }
 var GPS = null;             // { lat, lng } or null
 var HAS_ACTIVE_HD = false;  // true khi tài xế đang có HĐ đang chạy
+var ACTIVE_HDS = [];        // Danh sách HĐ đang active load từ Supabase
 var PHOTOS = [];            // Array of { dataUrl, fileName }
 var CURRENT_REPORT = null;  // key từ MODAL_TITLES
 
@@ -770,6 +771,7 @@ function populateApp(){
       var sbHDs = rows.map(function(r){
         return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, ngay_di:'', ngay_ve:'', tt:r.trang_thai, taixe:d.ten };
       });
+      ACTIVE_HDS = sbHDs;  // ← lưu global để openModal và saveBaoCao dùng
       renderActiveContracts(sbHDs);
       setReportButtons(true);
       // Thử fetch thêm ngay_di/ngay_ve nếu cột đã tồn tại (optional)
@@ -786,6 +788,7 @@ function populateApp(){
             var ex = exMap[h.so] || {};
             return Object.assign({}, h, { ngay_di: ex.ngay_di||h.ngay, ngay_ve: ex.ngay_ve||'' });
           });
+          ACTIVE_HDS = updated;  // ← cập nhật lại với đầy đủ ngay_di/ngay_ve
           renderActiveContracts(updated);
         }).catch(function(){}); // cột chưa tồn tại → bỏ qua
       }
@@ -945,9 +948,10 @@ function openModal(type){
   // Set title
   document.getElementById('modal-title').textContent = MODAL_TITLES[type] || type;
 
-  // Set active contract info nếu có
+  // Set active contract info — dùng ACTIVE_HDS từ Supabase, fallback mock
   var d = SESSION && SESSION.driver;
-  var activeHD = d ? MOCK_HD.find(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; }) : null;
+  var activeHD = ACTIVE_HDS.length ? ACTIVE_HDS[0]
+    : (d ? MOCK_HD.find(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; }) : null);
   document.getElementById('modal-contract').textContent = activeHD ? 'HĐ: '+activeHD.so+' · '+activeHD.kh : '';
 
   // Reset note & photos
@@ -1156,12 +1160,16 @@ async function uploadPhoto(dataUrl, fileName){
 async function saveBaoCao(anhUrls){
   var d    = SESSION.driver;
   var note = (document.getElementById('modal-note') || {}).value || '';
+  // Lấy hợp đồng đang active để lưu hd_so
+  var activeHD = ACTIVE_HDS.length ? ACTIVE_HDS[0]
+    : MOCK_HD.find(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; });
   var payload = {
     loai:       CURRENT_REPORT,
+    hd_so:      activeHD ? activeHD.so : null,   // ← lưu số HĐ để admin xem được
     tai_xe_id:  d.id && !d.id.startsWith('mock_') ? d.id : null,
     tai_xe_ten: d.ten,
     tai_xe_sdt: d.sdt,
-    bien_xe:    d.bienXe || null,
+    bien_xe:    d.bienXe && d.bienXe !== '—' ? d.bienXe : (activeHD ? activeHD.xe : null),
     ghi_chu:    note || null,
     anh_urls:   anhUrls,
     gps_lat:    GPS ? GPS.lat : null,
