@@ -148,7 +148,20 @@ function showModal(title,sub,body,footer){document.getElementById('modalTitle').
 function closeModal(){document.getElementById('mainModal').classList.remove('show');}
 function handleModalBg(e){if(e.target===document.getElementById('mainModal'))closeModal();}
 var confirmCb=null;
-function askDelete(title,msg,cb){document.getElementById('confirmTitle').textContent=title;document.getElementById('confirmMsg').textContent=msg||'Hành động này không thể hoàn tác.';confirmCb=cb;document.getElementById('confirmOverlay').classList.add('show');}
+// askConfirm: hộp xác nhận tùy chỉnh (thay thế confirm() native)
+function askConfirm(opts,cb){
+  var o=typeof opts==='string'?{title:opts}:opts;
+  document.getElementById('confirmIcon').textContent  = o.icon||'❓';
+  document.getElementById('confirmTitle').textContent = o.title||'Xác nhận';
+  document.getElementById('confirmMsg').textContent   = o.msg||'Bạn có chắc muốn thực hiện thao tác này?';
+  var btn=document.getElementById('confirmDoBtn');
+  btn.textContent=o.btnLabel||'Xác nhận';
+  btn.className='btn '+(o.btnClass||'btn-red');
+  confirmCb=cb;
+  document.getElementById('confirmOverlay').classList.add('show');
+}
+// askDelete: shortcut cho xóa
+function askDelete(title,msg,cb){askConfirm({icon:'🗑️',title:title,msg:msg||'Hành động này không thể hoàn tác.',btnLabel:'Xóa',btnClass:'btn-red'},cb);}
 function closeConfirm(){confirmCb=null;document.getElementById('confirmOverlay').classList.remove('show');}
 function doConfirm(){if(confirmCb)confirmCb();closeConfirm();}
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('show');}
@@ -404,8 +417,21 @@ function openHDDetail(id) {
     [['Giá trị',fmtM(h.giatri),'var(--text)'],['Đã thu','+'+fmtM(h.dathu),'var(--green)'],['Còn lại',cn>0?fmtM(cn):'Đã đủ',cn>0?'var(--orange)':'var(--green)']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.65rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace;color:'+p[2]+'">'+p[1]+'</div></div>';}).join('') + '</div>' +
     baoCaoSectionHTML(h.so),
     '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button><button class="btn btn-accent" onclick="closeModal();openHDModal(\'' + h.id + '\')">✏️ Sửa</button>');
-  // Async load ảnh báo cáo theo số HĐ
-  if(h.so) fetchBaoCao('hd_so', h.so).then(renderBaoCaoSection);
+  // Async load ảnh báo cáo: ưu tiên hd_so, fallback bien_xe (cho ảnh cũ chưa có hd_so)
+  (function loadBaoCaoHD(){
+    var promises = [];
+    if(h.so) promises.push(fetchBaoCao('hd_so', h.so));
+    if(h.xe) promises.push(fetchBaoCao('bien_xe', h.xe));
+    if(!promises.length){ renderBaoCaoSection([]); return; }
+    Promise.all(promises).then(function(results){
+      // Gộp kết quả, loại trùng theo id
+      var seen = {}, combined = [];
+      results.forEach(function(rows){ rows.forEach(function(r){ if(!seen[r.id]){ seen[r.id]=true; combined.push(r); } }); });
+      // Sắp xếp theo thời gian mới nhất
+      combined.sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
+      renderBaoCaoSection(combined);
+    });
+  })();
 }
 function openHDModal(id) {
   if (!requireAdmin()) return;
@@ -1080,7 +1106,7 @@ function renderBaoCaoSection(rows){
       bc.anh_urls.forEach(function(url,ui){
         var safeUrl=url.replace(/'/g,"\\'");
         var safeId=bc.id;
-        html+='<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--border)">'
+        html+='<div data-bc-photo="'+safeUrl+'" style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--border)">'
           +'<a href="'+url+'" target="_blank" style="display:block;width:100%;height:100%">'
           +'<img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy" '
           +'onerror="this.style.display=\'none\'">'
@@ -1102,59 +1128,66 @@ function renderBaoCaoSection(rows){
   el.innerHTML=html;
 }
 
+// Helper: fetch có check lỗi
+async function sbFetchCheck(url, opts){
+  var res = await fetch(url, opts);
+  if(!res.ok){
+    var body = ''; try{ body = await res.text(); }catch(e){}
+    throw new Error('HTTP '+res.status+(body?' — '+body.slice(0,120):''));
+  }
+  return res;
+}
+
 // Xóa 1 ảnh khỏi bao_cao (admin only)
 async function deleteBaoCaoPhoto(bcId, photoUrl){
   if(!requireAdmin()) return;
-  if(!confirm('Xóa ảnh này?\nThao tác không thể hoàn tác.')) return;
+  askConfirm({icon:'🖼️',title:'Xóa ảnh này?',msg:'Ảnh sẽ bị xóa vĩnh viễn. Thao tác không thể hoàn tác.',btnLabel:'Xóa ảnh',btnClass:'btn-red'}, async function(){
+    try{
+      var H = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
 
-  try{
-    // 1. Lấy record hiện tại
-    var r = await fetch(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId+'&select=anh_urls',
-      {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
-    var rows = await r.json();
-    if(!rows||!rows.length) throw new Error('Không tìm thấy báo cáo');
+      // 1. Lấy record hiện tại
+      var r = await sbFetchCheck(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId+'&select=anh_urls', {headers:H});
+      var rows = await r.json();
+      if(!rows||!rows.length) throw new Error('Không tìm thấy record báo cáo (id: '+bcId+')');
 
-    var oldUrls = rows[0].anh_urls || [];
-    var newUrls = oldUrls.filter(function(u){ return u !== photoUrl; });
+      var oldUrls = rows[0].anh_urls || [];
+      var newUrls = oldUrls.filter(function(u){ return u !== photoUrl; });
 
-    // 2. Xóa file khỏi Storage
-    var storageBase = SB_URL+'/storage/v1/';
-    var pathMatch = photoUrl.match(/\/object\/public\/reports\/(.+)$/);
-    if(pathMatch){
-      await fetch(storageBase+'object/reports/'+pathMatch[1],{
-        method:'DELETE',
-        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
-      });
-    }
-
-    // 3. Cập nhật hoặc xóa record
-    if(newUrls.length === 0){
-      // Không còn ảnh nào → xóa cả record
-      await fetch(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId,{
-        method:'DELETE',
-        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
-      });
-    } else {
-      // Cập nhật mảng URL
-      await fetch(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId,{
-        method:'PATCH',
-        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-        body: JSON.stringify({ anh_urls: newUrls })
-      });
-    }
-
-    // 4. Xóa thumbnail khỏi DOM ngay (không cần reload)
-    var imgs = document.querySelectorAll('#modal-baocao img');
-    imgs.forEach(function(img){
-      if(img.src === photoUrl || img.getAttribute('src') === photoUrl){
-        img.closest('div[style*="position:relative"]').remove();
+      // 2. Xóa file khỏi Supabase Storage (lỗi Storage không chặn bước 3)
+      var pathMatch = photoUrl.match(/\/object\/public\/reports\/(.+)$/);
+      if(pathMatch){
+        try{
+          await sbFetchCheck(SB_URL+'/storage/v1/object/reports/'+pathMatch[1],
+            {method:'DELETE', headers:H});
+        }catch(se){ console.warn('Storage DELETE:', se.message); }
       }
-    });
 
-    toast('🗑️ Đã xóa ảnh','info');
-  }catch(e){
-    toast('❌ Lỗi xóa ảnh: '+e.message,'error');
-  }
+      // 3. Cập nhật hoặc xóa record trong DB
+      if(newUrls.length === 0){
+        await sbFetchCheck(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId,
+          {method:'DELETE', headers:H});
+      } else {
+        await sbFetchCheck(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId, {
+          method:'PATCH',
+          headers:Object.assign({'Content-Type':'application/json','Prefer':'return=minimal'},H),
+          body: JSON.stringify({anh_urls: newUrls})
+        });
+      }
+
+      // 4. Xóa thumbnail khỏi DOM ngay
+      document.querySelectorAll('#modal-baocao img').forEach(function(img){
+        if(img.src===photoUrl||img.getAttribute('src')===photoUrl){
+          var wrap = img.closest('[data-bc-photo]') || img.parentElement;
+          if(wrap) wrap.remove();
+        }
+      });
+
+      toast('🗑️ Đã xóa ảnh','info');
+    }catch(e){
+      console.error('deleteBaoCaoPhoto:', e);
+      toast('❌ Xóa thất bại: '+e.message,'error');
+    }
+  });
 }
 
 // Hộp chứa section báo cáo — thêm vào cuối body của modal
@@ -1176,10 +1209,10 @@ document.addEventListener('DOMContentLoaded', async function(){
   });
   document.getElementById('userCard').title='Nhấn để đăng xuất';
   document.getElementById('userCard').onclick=function(){
-    if(confirm('Đăng xuất khỏi hệ thống?')){
+    askConfirm({icon:'👋',title:'Đăng xuất?',msg:'Bạn sẽ được chuyển về trang đăng nhập.',btnLabel:'Đăng xuất',btnClass:'btn-ghost'},function(){
       localStorage.removeItem('nk_session_v3');
       window.location.replace('/login.html');
-    }
+    });
   };
   await loadConfig();
   // Hiển thị skeleton khi đang tải Supabase

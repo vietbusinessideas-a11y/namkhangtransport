@@ -364,6 +364,19 @@
 
 </div><!-- end screen-app -->
 
+<!-- Custom Confirm Dialog (thay thế confirm() native) -->
+<div id="driverConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);text-align:center;animation:fadeIn .18s ease">
+    <div id="driverConfirmIcon" style="font-size:2.2rem;margin-bottom:10px">❓</div>
+    <div id="driverConfirmTitle" style="font-size:.95rem;font-weight:700;color:#1e293b;margin-bottom:8px"></div>
+    <div id="driverConfirmMsg" style="font-size:.8rem;color:#64748b;margin-bottom:22px;line-height:1.5"></div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeDriverConfirm()" style="flex:1;padding:11px;border-radius:10px;border:1.5px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit">Hủy</button>
+      <button id="driverConfirmDoBtn" onclick="doDriverConfirm()" style="flex:1;padding:11px;border-radius:10px;border:none;background:#ef4444;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit">OK</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════
      MODAL BÁO CÁO
 ══════════════════════════════════════════════ -->
@@ -491,6 +504,30 @@ var SESSION = null;         // { driver:{...}, xe:'...', loginTime:Date }
 var GPS = null;             // { lat, lng } or null
 var HAS_ACTIVE_HD = false;  // true khi tài xế đang có HĐ đang chạy
 var ACTIVE_HDS = [];        // Danh sách HĐ đang active load từ Supabase
+
+// ── Custom confirm dialog (thay confirm() native) ──
+var _driverConfirmCb = null;
+function askDriverConfirm(opts, cb){
+  var o = typeof opts === 'string' ? {title: opts} : opts;
+  document.getElementById('driverConfirmIcon').textContent  = o.icon || '❓';
+  document.getElementById('driverConfirmTitle').textContent = o.title || 'Xác nhận';
+  document.getElementById('driverConfirmMsg').textContent   = o.msg || '';
+  var btn = document.getElementById('driverConfirmDoBtn');
+  btn.textContent = o.btnLabel || 'OK';
+  btn.style.background = o.danger ? '#ef4444' : '#2563eb';
+  _driverConfirmCb = cb;
+  var ov = document.getElementById('driverConfirmOverlay');
+  ov.style.display = 'flex';
+}
+function closeDriverConfirm(){
+  document.getElementById('driverConfirmOverlay').style.display = 'none';
+  _driverConfirmCb = null;
+}
+function doDriverConfirm(){
+  var cb = _driverConfirmCb;
+  closeDriverConfirm();
+  if(cb) cb();
+}
 var PHOTOS = [];            // Array of { dataUrl, fileName }
 var CURRENT_REPORT = null;  // key từ MODAL_TITLES
 
@@ -707,13 +744,19 @@ function togglePass(){
 // LOGOUT
 // ═══════════════════════════════════════
 function doLogout(){
-  if(!confirm('Bạn muốn đăng xuất?')) return;
-  SESSION = null;
-  localStorage.removeItem('nk_driver_session');
-  showScreen('login');
-  // Reset form
-  document.getElementById('login-phone').value = '';
-  document.getElementById('login-pass').value  = '';
+  askDriverConfirm({
+    icon: '👋',
+    title: 'Đăng xuất?',
+    msg: 'Bạn sẽ được chuyển về màn hình đăng nhập.',
+    btnLabel: 'Đăng xuất',
+    danger: false
+  }, function(){
+    SESSION = null;
+    localStorage.removeItem('nk_driver_session');
+    showScreen('login');
+    document.getElementById('login-phone').value = '';
+    document.getElementById('login-pass').value  = '';
+  });
 }
 
 // ═══════════════════════════════════════
