@@ -494,9 +494,14 @@ var PHOTOS = [];            // Array of { dataUrl, fileName }
 var CURRENT_REPORT = null;  // key từ MODAL_TITLES
 
 // ═══════════════════════════════════════
-// INIT
+// INIT — load config TRƯỚC, rồi mới restore session
 // ═══════════════════════════════════════
-(function init(){
+
+// Lấy GPS ngay khi trang tải (không cần chờ config)
+requestGPS();
+
+// Load config Supabase TRƯỚC, sau đó mới khởi tạo app
+loadConfig().then(function(){
   // Khôi phục session nếu còn hạn
   try {
     var raw = localStorage.getItem('nk_driver_session');
@@ -504,7 +509,7 @@ var CURRENT_REPORT = null;  // key từ MODAL_TITLES
       var s = JSON.parse(raw);
       if(s && s.loginTime && Date.now() - s.loginTime < 12 * 3600 * 1000){
         SESSION = s;
-        showApp();
+        showApp();   // populateApp() chạy sau khi SB_URL/SB_KEY đã sẵn sàng
         return;
       }
     }
@@ -512,13 +517,7 @@ var CURRENT_REPORT = null;  // key từ MODAL_TITLES
 
   // Không có session → login screen
   showScreen('login');
-})();
-
-// Lấy GPS ngay khi trang tải
-requestGPS();
-
-// Load config Supabase (không block UI)
-loadConfig();
+});
 
 // ═══════════════════════════════════════
 // CONFIG / SUPABASE
