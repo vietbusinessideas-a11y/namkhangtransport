@@ -760,13 +760,13 @@ function populateApp(){
   // Async load từ Supabase nếu có
   if(SB_URL && SB_KEY){
     sbGet('hop_dong',
-      'select=so_hd,khach_hang,tuyen_duong,ngay_th,trang_thai'
+      'select=so_hd,khach_hang,tuyen_duong,ngay_th,ngay_di,ngay_ve,trang_thai'
       +'&tai_xe=eq.'+encodeURIComponent(d.ten)
-      +'&trang_thai=eq.dang_chay&limit=10'
+      +'&or=(trang_thai.eq.dang_chay,trang_thai.eq.cho_xe)&limit=10'
     ).then(function(rows){
       if(!rows || !rows.length){ setReportButtons(false); return; }
       var sbHDs = rows.map(function(r){
-        return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, tt:r.trang_thai, taixe:d.ten };
+        return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, ngay_di:r.ngay_di||r.ngay_th, ngay_ve:r.ngay_ve, tt:r.trang_thai, taixe:d.ten };
       });
       renderActiveContracts(sbHDs);
       setReportButtons(true);
@@ -777,15 +777,20 @@ function populateApp(){
   function renderActiveContracts(hdList){
     if(hdList.length){
       activeCont.innerHTML = hdList.map(function(h, i){
+        var isDangChay = h.tt === 'dang_chay';
+        var statusColor = isDangChay ? '#16a34a' : '#d97706';
+        var statusLabel = isDangChay ? 'ĐANG CHẠY' : 'CHỜ THỰC HIỆN';
+        var dur = calcDuration(h.ngay_di, h.ngay_ve);
         return '<div class="card" style="padding:16px 18px;margin-bottom:'+(i<hdList.length-1?'10px':'0')+'">'+
           '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">'+
-            '<div style="display:flex;align-items:center;gap:6px"><div class="live-dot"></div><span style="font-size:.72rem;font-weight:700;color:#16a34a">ĐANG CHẠY</span></div>'+
+            '<div style="display:flex;align-items:center;gap:6px"><div class="live-dot" style="background:'+statusColor+'"></div><span style="font-size:.72rem;font-weight:700;color:'+statusColor+'">'+statusLabel+'</span></div>'+
             '<span class="badge-blue">'+h.so+'</span>'+
           '</div>'+
           '<div style="font-size:.9rem;font-weight:700;margin-bottom:4px">'+h.kh+'</div>'+
           '<div style="font-size:.78rem;color:#6b6760;display:flex;align-items:center;gap:4px">'+
             '<span>📍</span><span>'+h.tuyen+'</span>'+
           '</div>'+
+          (dur ? '<div style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:rgba(37,99,235,.1);border-radius:20px;font-size:.7rem;font-weight:700;color:#2563eb">🗓 '+dur+'</div>' : '')+
           '<div style="display:flex;gap:8px;margin-top:12px">'+
             '<button onclick="openModal(\'hoan_thanh\')" style="flex:1;padding:9px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;font-size:.75rem;font-weight:700;cursor:pointer">✅ Báo hoàn thành</button>'+
             '<button onclick="openModal(\'su_co\')" style="padding:9px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:.75rem;font-weight:700;cursor:pointer">⚠️ Sự cố</button>'+
@@ -798,21 +803,41 @@ function populateApp(){
   }
 
   // Hợp đồng tab
-  var allHDs = MOCK_HD.filter(function(h){ return h.taixe===d.ten; });
   var myCont = document.getElementById('my-contracts');
-  if(allHDs.length){
-    myCont.innerHTML = allHDs.map(function(h, i){
-      var ttMap = { dang_chay:'badge-blue', hoan_thanh:'badge-green', cho_xe:'badge-orange', cho_thanh_toan:'badge-orange' };
-      var ttLbl = { dang_chay:'Đang chạy', hoan_thanh:'Hoàn thành', cho_xe:'Chờ thực hiện', cho_thanh_toan:'Chờ TT' };
-      return '<div class="card" style="padding:14px 18px;margin-bottom:8px">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
-          '<span style="font-size:.7rem;font-weight:700;font-family:\'DM Mono\',monospace;color:#2563eb">'+h.so+'</span>'+
-          '<span class="'+(ttMap[h.tt]||'badge-blue')+'">'+( ttLbl[h.tt]||h.tt)+'</span>'+
-        '</div>'+
-        '<div style="font-size:.86rem;font-weight:600;margin-bottom:3px">'+h.kh+'</div>'+
-        '<div style="font-size:.74rem;color:#6b6760">📍 '+h.tuyen+' · 📅 '+fmtDate(h.ngay)+'</div>'+
-      '</div>';
-    }).join('');
+  function renderMyContracts(hdList){
+    var ttMap = { dang_chay:'badge-blue', hoan_thanh:'badge-green', cho_xe:'badge-orange', cho_thanh_toan:'badge-orange' };
+    var ttLbl = { dang_chay:'Đang chạy', hoan_thanh:'Hoàn thành', cho_xe:'Chờ thực hiện', cho_thanh_toan:'Chờ TT' };
+    if(hdList.length){
+      myCont.innerHTML = hdList.map(function(h){
+        var dur = calcDuration(h.ngay_di||h.ngay, h.ngay_ve);
+        return '<div class="card" style="padding:14px 18px;margin-bottom:8px">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
+            '<span style="font-size:.7rem;font-weight:700;font-family:\'DM Mono\',monospace;color:#2563eb">'+h.so+'</span>'+
+            '<span class="'+(ttMap[h.tt]||'badge-blue')+'">'+( ttLbl[h.tt]||h.tt)+'</span>'+
+          '</div>'+
+          '<div style="font-size:.86rem;font-weight:600;margin-bottom:3px">'+h.kh+'</div>'+
+          '<div style="font-size:.74rem;color:#6b6760">📍 '+h.tuyen+' · 📅 '+fmtDate(h.ngay||h.ngay_di)+(dur?' · <span style="color:#2563eb;font-weight:600">'+dur+'</span>':'')+'</div>'+
+        '</div>';
+      }).join('');
+    } else {
+      myCont.innerHTML = '<div style="text-align:center;padding:24px;color:#a09c96;font-size:.82rem">Chưa có hợp đồng</div>';
+    }
+  }
+  var allHDs = MOCK_HD.filter(function(h){ return h.taixe===d.ten; });
+  renderMyContracts(allHDs);
+  // Override bằng Supabase nếu có
+  if(SB_URL && SB_KEY){
+    sbGet('hop_dong',
+      'select=so_hd,khach_hang,tuyen_duong,ngay_th,ngay_di,ngay_ve,trang_thai'
+      +'&tai_xe=eq.'+encodeURIComponent(d.ten)
+      +'&order=ngay_th.desc&limit=20'
+    ).then(function(rows){
+      if(rows && rows.length){
+        renderMyContracts(rows.map(function(r){
+          return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, ngay_di:r.ngay_di, ngay_ve:r.ngay_ve, tt:r.trang_thai };
+        }));
+      }
+    }).catch(function(){/* giữ mock */});
   }
 
   // Stats tháng
@@ -826,6 +851,15 @@ function fmtDate(d){
   if(!d) return '—';
   var p = d.split('-');
   return p[2]+'/'+p[1]+'/'+p[0];
+}
+
+function calcDuration(ngay_di, ngay_ve){
+  if(!ngay_di) return '';
+  if(!ngay_ve || ngay_di === ngay_ve) return 'Trong ngày';
+  var d1 = new Date(ngay_di), d2 = new Date(ngay_ve);
+  var nights = Math.round((d2 - d1) / 864e5);
+  if(nights <= 0) return 'Trong ngày';
+  return (nights+1)+'N'+nights+'D';
 }
 
 // ═══════════════════════════════════════
