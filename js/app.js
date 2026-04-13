@@ -1050,17 +1050,84 @@ function renderBaoCaoSection(rows){
     }
     if(bc.anh_urls&&bc.anh_urls.length){
       html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px">';
-      bc.anh_urls.forEach(function(url){
-        html+='<a href="'+url+'" target="_blank" style="display:block;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--border)">'
+      bc.anh_urls.forEach(function(url,ui){
+        var safeUrl=url.replace(/'/g,"\\'");
+        var safeId=bc.id;
+        html+='<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--border)">'
+          +'<a href="'+url+'" target="_blank" style="display:block;width:100%;height:100%">'
           +'<img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy" '
           +'onerror="this.style.display=\'none\'">'
-          +'</a>';
+          +'</a>'
+          // Nút xóa — chỉ hiển thị cho admin
+          +(isAdmin()
+            ? '<button onclick="event.preventDefault();deleteBaoCaoPhoto(\''+safeId+'\',\''+safeUrl+'\')" '
+              +'style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;'
+              +'background:rgba(220,38,38,.85);border:none;color:#fff;font-size:11px;cursor:pointer;'
+              +'display:flex;align-items:center;justify-content:center;line-height:1;font-weight:700;'
+              +'box-shadow:0 1px 4px rgba(0,0,0,.3)" title="Xóa ảnh này">✕</button>'
+            : '')
+          +'</div>';
       });
       html+='</div>';
     }
     html+='</div>';
   });
   el.innerHTML=html;
+}
+
+// Xóa 1 ảnh khỏi bao_cao (admin only)
+async function deleteBaoCaoPhoto(bcId, photoUrl){
+  if(!requireAdmin()) return;
+  if(!confirm('Xóa ảnh này?\nThao tác không thể hoàn tác.')) return;
+
+  try{
+    // 1. Lấy record hiện tại
+    var r = await fetch(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId+'&select=anh_urls',
+      {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    var rows = await r.json();
+    if(!rows||!rows.length) throw new Error('Không tìm thấy báo cáo');
+
+    var oldUrls = rows[0].anh_urls || [];
+    var newUrls = oldUrls.filter(function(u){ return u !== photoUrl; });
+
+    // 2. Xóa file khỏi Storage
+    var storageBase = SB_URL+'/storage/v1/';
+    var pathMatch = photoUrl.match(/\/object\/public\/reports\/(.+)$/);
+    if(pathMatch){
+      await fetch(storageBase+'object/reports/'+pathMatch[1],{
+        method:'DELETE',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+      });
+    }
+
+    // 3. Cập nhật hoặc xóa record
+    if(newUrls.length === 0){
+      // Không còn ảnh nào → xóa cả record
+      await fetch(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId,{
+        method:'DELETE',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+      });
+    } else {
+      // Cập nhật mảng URL
+      await fetch(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId,{
+        method:'PATCH',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+        body: JSON.stringify({ anh_urls: newUrls })
+      });
+    }
+
+    // 4. Xóa thumbnail khỏi DOM ngay (không cần reload)
+    var imgs = document.querySelectorAll('#modal-baocao img');
+    imgs.forEach(function(img){
+      if(img.src === photoUrl || img.getAttribute('src') === photoUrl){
+        img.closest('div[style*="position:relative"]').remove();
+      }
+    });
+
+    toast('🗑️ Đã xóa ảnh','info');
+  }catch(e){
+    toast('❌ Lỗi xóa ảnh: '+e.message,'error');
+  }
 }
 
 // Hộp chứa section báo cáo — thêm vào cuối body của modal

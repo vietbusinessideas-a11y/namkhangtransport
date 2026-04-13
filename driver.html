@@ -236,30 +236,40 @@
 
       <!-- Báo cáo nhanh -->
       <div style="font-size:.72rem;font-weight:700;color:#a09c96;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">📝 Báo cáo nhanh</div>
+
+      <!-- Banner cảnh báo khi không có HĐ (ẩn mặc định) -->
+      <div id="no-hd-banner" style="display:none;align-items:center;gap:10px;
+           background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;
+           padding:12px 14px;margin-bottom:12px;font-size:.78rem;color:#92400e">
+        <span style="font-size:1.2rem">⚠️</span>
+        <span>Bạn chưa có hợp đồng đang thực hiện.<br>
+        <strong>Một số báo cáo bị tạm khóa</strong> cho đến khi có chuyến được giao.</span>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
-        <!-- 8 nút báo cáo -->
-        <button class="rpt-btn" onclick="openModal('do_dau')">
+        <!-- 8 nút báo cáo — data-type để setReportButtons() nhận biết -->
+        <button class="rpt-btn" data-type="do_dau" onclick="openModal('do_dau')">
           <span class="icon">⛽</span><span class="lbl">Báo cáo đổ dầu</span>
         </button>
-        <button class="rpt-btn" onclick="openModal('km_dau')">
+        <button class="rpt-btn" data-type="km_dau" onclick="openModal('km_dau')">
           <span class="icon">🔢</span><span class="lbl">Báo cáo km đầu</span>
         </button>
-        <button class="rpt-btn" onclick="openModal('km_cuoi')">
+        <button class="rpt-btn" data-type="km_cuoi" onclick="openModal('km_cuoi')">
           <span class="icon">🏁</span><span class="lbl">Báo cáo km cuối</span>
         </button>
-        <button class="rpt-btn" onclick="openModal('hoan_thanh')">
+        <button class="rpt-btn" data-type="hoan_thanh" onclick="openModal('hoan_thanh')">
           <span class="icon">✅</span><span class="lbl">Báo cáo hoàn thành</span>
         </button>
-        <button class="rpt-btn" onclick="openModal('su_co')">
+        <button class="rpt-btn" data-type="su_co" onclick="openModal('su_co')">
           <span class="icon">⚠️</span><span class="lbl">Báo sự cố</span>
         </button>
-        <button class="rpt-btn" onclick="openModal('bao_cao_khac')">
+        <button class="rpt-btn" data-type="bao_cao_khac" onclick="openModal('bao_cao_khac')">
           <span class="icon">📄</span><span class="lbl">Báo cáo khác</span>
         </button>
-        <button class="rpt-btn" onclick="openModal('hop_dong')">
+        <button class="rpt-btn" data-type="hop_dong" onclick="openModal('hop_dong')">
           <span class="icon">📋</span><span class="lbl">BC hợp đồng vận chuyển</span>
         </button>
-        <button class="rpt-btn" onclick="openModal('hanh_khach')">
+        <button class="rpt-btn" data-type="hanh_khach" onclick="openModal('hanh_khach')">
           <span class="icon">👥</span><span class="lbl">DS hành khách</span>
         </button>
       </div>
@@ -299,14 +309,14 @@
     <div id="tab-baocao" class="tab-content px-4 pt-4">
       <div style="font-size:.72rem;font-weight:700;color:#a09c96;letter-spacing:.8px;text-transform:uppercase;margin-bottom:12px">📝 Gửi báo cáo</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <button class="rpt-btn" onclick="openModal('do_dau')"><span class="icon">⛽</span><span class="lbl">Đổ dầu</span></button>
-        <button class="rpt-btn" onclick="openModal('km_dau')"><span class="icon">🔢</span><span class="lbl">Km đầu</span></button>
-        <button class="rpt-btn" onclick="openModal('km_cuoi')"><span class="icon">🏁</span><span class="lbl">Km cuối</span></button>
-        <button class="rpt-btn" onclick="openModal('hoan_thanh')"><span class="icon">✅</span><span class="lbl">Hoàn thành</span></button>
-        <button class="rpt-btn" onclick="openModal('su_co')"><span class="icon">⚠️</span><span class="lbl">Sự cố</span></button>
-        <button class="rpt-btn" onclick="openModal('bao_cao_khac')"><span class="icon">📄</span><span class="lbl">Báo cáo khác</span></button>
-        <button class="rpt-btn" onclick="openModal('hop_dong')"><span class="icon">📋</span><span class="lbl">Hợp đồng VC</span></button>
-        <button class="rpt-btn" onclick="openModal('hanh_khach')"><span class="icon">👥</span><span class="lbl">Hành khách</span></button>
+        <button class="rpt-btn" data-type="do_dau" onclick="openModal('do_dau')"><span class="icon">⛽</span><span class="lbl">Đổ dầu</span></button>
+        <button class="rpt-btn" data-type="km_dau" onclick="openModal('km_dau')"><span class="icon">🔢</span><span class="lbl">Km đầu</span></button>
+        <button class="rpt-btn" data-type="km_cuoi" onclick="openModal('km_cuoi')"><span class="icon">🏁</span><span class="lbl">Km cuối</span></button>
+        <button class="rpt-btn" data-type="hoan_thanh" onclick="openModal('hoan_thanh')"><span class="icon">✅</span><span class="lbl">Hoàn thành</span></button>
+        <button class="rpt-btn" data-type="su_co" onclick="openModal('su_co')"><span class="icon">⚠️</span><span class="lbl">Sự cố</span></button>
+        <button class="rpt-btn" data-type="bao_cao_khac" onclick="openModal('bao_cao_khac')"><span class="icon">📄</span><span class="lbl">Báo cáo khác</span></button>
+        <button class="rpt-btn" data-type="hop_dong" onclick="openModal('hop_dong')"><span class="icon">📋</span><span class="lbl">Hợp đồng VC</span></button>
+        <button class="rpt-btn" data-type="hanh_khach" onclick="openModal('hanh_khach')"><span class="icon">👥</span><span class="lbl">Hành khách</span></button>
       </div>
     </div>
 
@@ -479,6 +489,7 @@ var MODAL_TITLES = {
 var SB_URL = '', SB_KEY = '';
 var SESSION = null;         // { driver:{...}, xe:'...', loginTime:Date }
 var GPS = null;             // { lat, lng } or null
+var HAS_ACTIVE_HD = false;  // true khi tài xế đang có HĐ đang chạy
 var PHOTOS = [];            // Array of { dataUrl, fileName }
 var CURRENT_REPORT = null;  // key từ MODAL_TITLES
 
@@ -738,30 +749,52 @@ function populateApp(){
       '<span style="font-size:.82rem;font-weight:600">'+r[2]+'</span></div>';
   }).join('');
 
-  // Hợp đồng hôm nay
+  // Hợp đồng hôm nay — thử Supabase trước, fallback mock
   var todayHDs = MOCK_HD.filter(function(h){ return h.ngay===today && h.taixe===d.ten && h.tt==='dang_chay'; });
-
-  // Nếu không có hôm nay → kiểm tra đang chạy bất kể ngày
   if(!todayHDs.length) todayHDs = MOCK_HD.filter(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; });
 
+  // Gọi ngay với mock data, rồi async Supabase override
+  setReportButtons(todayHDs.length > 0);
+  renderActiveContracts(todayHDs);
+
+  // Async load từ Supabase nếu có
+  if(SB_URL && SB_KEY){
+    sbGet('hop_dong',
+      'select=so_hd,khach_hang,tuyen_duong,ngay_th,trang_thai'
+      +'&tai_xe=eq.'+encodeURIComponent(d.ten)
+      +'&trang_thai=eq.dang_chay&limit=10'
+    ).then(function(rows){
+      if(!rows || !rows.length){ setReportButtons(false); return; }
+      var sbHDs = rows.map(function(r){
+        return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, tt:r.trang_thai, taixe:d.ten };
+      });
+      renderActiveContracts(sbHDs);
+      setReportButtons(true);
+    }).catch(function(){ /* giữ mock */ });
+  }
+
   var activeCont = document.getElementById('active-contracts');
-  if(todayHDs.length){
-    activeCont.innerHTML = todayHDs.map(function(h, i){
-      return '<div class="card" style="padding:16px 18px;margin-bottom:'+(i<todayHDs.length-1?'10px':'0')+'">'+
-        '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">'+
-          '<div style="display:flex;align-items:center;gap:6px"><div class="live-dot"></div><span style="font-size:.72rem;font-weight:700;color:#16a34a">ĐANG CHẠY</span></div>'+
-          '<span class="badge-blue">'+h.so+'</span>'+
-        '</div>'+
-        '<div style="font-size:.9rem;font-weight:700;margin-bottom:4px">'+h.kh+'</div>'+
-        '<div style="font-size:.78rem;color:#6b6760;display:flex;align-items:center;gap:4px">'+
-          '<span>📍</span><span>'+h.tuyen+'</span>'+
-        '</div>'+
-        '<div style="display:flex;gap:8px;margin-top:12px">'+
-          '<button onclick="openModal(\'hoan_thanh\')" style="flex:1;padding:9px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;font-size:.75rem;font-weight:700;cursor:pointer">✅ Báo hoàn thành</button>'+
-          '<button onclick="openModal(\'su_co\')" style="padding:9px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:.75rem;font-weight:700;cursor:pointer">⚠️ Sự cố</button>'+
-        '</div>'+
-      '</div>';
-    }).join('');
+  function renderActiveContracts(hdList){
+    if(hdList.length){
+      activeCont.innerHTML = hdList.map(function(h, i){
+        return '<div class="card" style="padding:16px 18px;margin-bottom:'+(i<hdList.length-1?'10px':'0')+'">'+
+          '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">'+
+            '<div style="display:flex;align-items:center;gap:6px"><div class="live-dot"></div><span style="font-size:.72rem;font-weight:700;color:#16a34a">ĐANG CHẠY</span></div>'+
+            '<span class="badge-blue">'+h.so+'</span>'+
+          '</div>'+
+          '<div style="font-size:.9rem;font-weight:700;margin-bottom:4px">'+h.kh+'</div>'+
+          '<div style="font-size:.78rem;color:#6b6760;display:flex;align-items:center;gap:4px">'+
+            '<span>📍</span><span>'+h.tuyen+'</span>'+
+          '</div>'+
+          '<div style="display:flex;gap:8px;margin-top:12px">'+
+            '<button onclick="openModal(\'hoan_thanh\')" style="flex:1;padding:9px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;font-size:.75rem;font-weight:700;cursor:pointer">✅ Báo hoàn thành</button>'+
+            '<button onclick="openModal(\'su_co\')" style="padding:9px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:.75rem;font-weight:700;cursor:pointer">⚠️ Sự cố</button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+    } else {
+      activeCont.innerHTML='<div class="card" style="padding:20px;text-align:center;color:#a09c96"><div style="font-size:2rem;margin-bottom:6px">📋</div><div style="font-size:.82rem">Chưa có chuyến hôm nay</div></div>';
+    }
   }
 
   // Hợp đồng tab
@@ -793,6 +826,31 @@ function fmtDate(d){
   if(!d) return '—';
   var p = d.split('-');
   return p[2]+'/'+p[1]+'/'+p[0];
+}
+
+// ═══════════════════════════════════════
+// REPORT BUTTON STATE
+// ═══════════════════════════════════════
+// Các loại báo cáo CẦN hợp đồng đang chạy
+var REQUIRES_HD = ['do_dau','km_dau','km_cuoi','hoan_thanh','hop_dong','hanh_khach'];
+
+function setReportButtons(hasHD){
+  HAS_ACTIVE_HD = hasHD;
+
+  // Cập nhật tất cả nút .rpt-btn
+  document.querySelectorAll('.rpt-btn').forEach(function(btn){
+    var type = btn.getAttribute('data-type');
+    var needHD = REQUIRES_HD.indexOf(type) >= 0;
+    var disabled = needHD && !hasHD;
+    btn.disabled = disabled;
+    btn.style.opacity = disabled ? '0.38' : '1';
+    btn.style.cursor  = disabled ? 'not-allowed' : 'pointer';
+    btn.style.filter  = disabled ? 'grayscale(60%)' : '';
+  });
+
+  // Banner thông báo
+  var banner = document.getElementById('no-hd-banner');
+  if(banner) banner.style.display = hasHD ? 'none' : 'flex';
 }
 
 // ═══════════════════════════════════════
