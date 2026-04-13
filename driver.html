@@ -943,39 +943,51 @@ function fmtDriver(n){
 
 // ─── Tải thống kê tháng từ Supabase ──────────────────────────────────────
 function loadMonthStats(driverName, yyyymm){
-  if(!SB_URL){ return; }       // offline — giữ nguyên "—"
+  if(!SB_URL || !SB_KEY){ return; }   // offline — giữ nguyên "—"
 
-  // Tính khoảng thời gian [đầu tháng, đầu tháng sau)
-  var parts     = yyyymm.split('-');
-  var y         = parseInt(parts[0], 10);
-  var mo        = parseInt(parts[1], 10);
-  var nextY     = mo === 12 ? y + 1 : y;
-  var nextMo    = mo === 12 ? 1 : mo + 1;
-  var pad       = function(n){ return String(n).padStart(2,'0'); };
-  var monthFrom = yyyymm + '-01T00:00:00';
-  var monthTo   = nextY + '-' + pad(nextMo) + '-01T00:00:00';
-  var txEnc     = encodeURIComponent(driverName);
+  var txEnc = encodeURIComponent(driverName);
 
-  // ── 1. CHUYẾN: đếm báo cáo loại hoan_thanh trong tháng ──
-  sbGet('bao_cao',
-    'select=id'
-    +'&tai_xe_ten=eq.'+txEnc
-    +'&loai=eq.hoan_thanh'
-    +'&created_at=gte.'+encodeURIComponent(monthFrom)
-    +'&created_at=lt.'+encodeURIComponent(monthTo)
+  // ── 1. CHUYẾN + DOANH THU: lấy hết hop_dong của tài xế trong tháng ──
+  // Truy vấn hop_dong: trang_thai hoan_thanh hoặc cho_thanh_toan trong tháng yyyymm
+  sbGet('hop_dong',
+    'select=id,gia_tri,da_thu,trang_thai,ngay_th'
+    +'&tai_xe=eq.'+txEnc
+    +'&ngay_th=gte.'+yyyymm+'-01'
+    +'&ngay_th=lte.'+yyyymm+'-31'
   ).then(function(rows){
-    document.getElementById('stat-chuyen').textContent = rows ? rows.length : '0';
-  }).catch(function(){ /* giữ "—" */ });
+    if(!rows) rows = [];
+    // Số chuyến = tất cả hợp đồng trong tháng (kể cả đang chạy, hoàn thành, chờ TT)
+    document.getElementById('stat-chuyen').textContent = rows.length;
+    // Doanh thu = ưu tiên da_thu nếu > 0, fallback gia_tri
+    var total = rows.reduce(function(s, r){
+      var thu = Number(r.da_thu) || 0;
+      var gt  = Number(r.gia_tri) || 0;
+      return s + (thu > 0 ? thu : gt);
+    }, 0);
+    document.getElementById('stat-rev').textContent = total > 0 ? fmtDriver(total) : '0đ';
+  }).catch(function(e){
+    console.warn('[NK] loadMonthStats hop_dong:', e);
+  });
 
   // ── 2. TỔNG KM: max(km_cuoi) − min(km_dau) trong tháng ──
+  // Tính khoảng thời gian [đầu tháng, đầu tháng sau)
+  var parts  = yyyymm.split('-');
+  var y      = parseInt(parts[0], 10);
+  var mo     = parseInt(parts[1], 10);
+  var nextY  = mo === 12 ? y + 1 : y;
+  var nextMo = mo === 12 ? 1 : mo + 1;
+  var pad    = function(n){ return String(n).padStart(2,'0'); };
+  var mFrom  = encodeURIComponent(yyyymm+'-01T00:00:00');
+  var mTo    = encodeURIComponent(nextY+'-'+pad(nextMo)+'-01T00:00:00');
+
   Promise.all([
     sbGet('bao_cao',
       'select=so_km'
       +'&tai_xe_ten=eq.'+txEnc
       +'&loai=eq.km_dau'
       +'&so_km=not.is.null'
-      +'&created_at=gte.'+encodeURIComponent(monthFrom)
-      +'&created_at=lt.'+encodeURIComponent(monthTo)
+      +'&created_at=gte.'+mFrom
+      +'&created_at=lt.'+mTo
       +'&order=so_km.asc&limit=1'
     ),
     sbGet('bao_cao',
@@ -983,30 +995,19 @@ function loadMonthStats(driverName, yyyymm){
       +'&tai_xe_ten=eq.'+txEnc
       +'&loai=eq.km_cuoi'
       +'&so_km=not.is.null'
-      +'&created_at=gte.'+encodeURIComponent(monthFrom)
-      +'&created_at=lt.'+encodeURIComponent(monthTo)
+      +'&created_at=gte.'+mFrom
+      +'&created_at=lt.'+mTo
       +'&order=so_km.desc&limit=1'
     )
   ]).then(function(res){
     var dau  = res[0] && res[0].length ? Number(res[0][0].so_km) : null;
     var cuoi = res[1] && res[1].length ? Number(res[1][0].so_km) : null;
     if(dau !== null && cuoi !== null && cuoi >= dau){
-      var diff = cuoi - dau;
-      document.getElementById('stat-km').textContent = diff.toLocaleString('vi-VN') + ' km';
+      document.getElementById('stat-km').textContent =
+        (cuoi - dau).toLocaleString('vi-VN') + ' km';
     }
-  }).catch(function(){ /* giữ "—" */ });
-
-  // ── 3. DOANH THU: tổng da_thu hợp đồng của tài xế trong tháng ──
-  sbGet('hop_dong',
-    'select=da_thu'
-    +'&tai_xe=eq.'+txEnc
-    +'&ngay_th=gte.'+yyyymm+'-01'
-    +'&ngay_th=lte.'+yyyymm+'-31'
-  ).then(function(rows){
-    if(!rows || !rows.length) return;
-    var total = rows.reduce(function(s,r){ return s + Number(r.da_thu||0); }, 0);
-    document.getElementById('stat-rev').textContent = fmtDriver(total);
-  }).catch(function(){ /* giữ "—" */ });
+    // Nếu chưa có bao_cao km → giữ nguyên "—"
+  }).catch(function(){ /* bảng/cột chưa có → bỏ qua */ });
 }
 
 function fmtDate(d){
