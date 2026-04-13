@@ -64,45 +64,12 @@ function requireAdmin(){if(!isAdmin()){toast('🚫 Bạn không có quyền th�
 // ═══════════════════════════════════════
 var DB={hopDong:[],thuChi:[],xe:[],taiXe:[],khachHang:[]};
 
-var DEFAULT_HD=[
-  {id:'hd01',so:'HD-2604',kh:'Cty TNHH Minh Long',tuyen:'HCM → Vũng Tàu',ngay:'2026-04-26',xe:'51B-12345',taixe:'Trần Văn A',giatri:45000000,dathu:10000000,tt:'dang_chay'},
-  {id:'hd02',so:'HD-2603',kh:'THPT Nguyễn Du',tuyen:'HCM → Cần Thơ',ngay:'2026-04-22',xe:'51C-23456',taixe:'Nguyễn Văn B',giatri:45500000,dathu:45500000,tt:'hoan_thanh'},
-  {id:'hd03',so:'HD-2602',kh:'Nguyễn Văn Thành',tuyen:'HCM → Đà Lạt',ngay:'2026-04-16',xe:'51E-56789',taixe:'Lê Văn C',giatri:28000000,dathu:28000000,tt:'hoan_thanh'},
-  {id:'hd04',so:'HD-2601',kh:'Tập đoàn Hoa Sen',tuyen:'HCM → Bình Dương',ngay:'2026-04-18',xe:'51A-34567',taixe:'Phạm Văn D',giatri:32000000,dathu:20000000,tt:'cho_thanh_toan'},
-  {id:'hd05',so:'HD-2600',kh:'Cty CP Vincom',tuyen:'HCM → Phan Thiết',ngay:'2026-04-10',xe:'51D-45678',taixe:'',giatri:38000000,dathu:0,tt:'cho_thanh_toan'},
-];
-var DEFAULT_TC=[
-  {id:'tc01',type:'thu',loai:'Thu hợp đồng',ngay:'2026-04-26',gio:'14:30',sotien:10000000,hd:'HD-2604',httt:'Chuyển khoản',xe:'51B-12345',taixe:'Trần Văn A',kh:'Cty TNHH Minh Long',mota:'Thanh toán đợt 1'},
-  {id:'tc02',type:'thu',loai:'Thu hợp đồng',ngay:'2026-04-22',gio:'09:15',sotien:45500000,hd:'HD-2603',httt:'Chuyển khoản',xe:'51C-23456',taixe:'Nguyễn Văn B',kh:'THPT Nguyễn Du',mota:'Quyết toán hợp đồng'},
-  {id:'tc03',type:'thu',loai:'Đặt cọc',ngay:'2026-04-18',gio:'10:00',sotien:20000000,hd:'HD-2601',httt:'Tiền mặt',xe:'51A-34567',taixe:'Phạm Văn D',kh:'Tập đoàn Hoa Sen',mota:'Đặt cọc trước HĐ'},
-  {id:'tc04',type:'chi',loai:'Nhiên liệu',ngay:'2026-04-25',gio:'08:00',sotien:1800000,hd:'HD-2604',httt:'Tiền mặt',xe:'51B-12345',taixe:'Trần Văn A',kh:'Petrolimex Q.7',mota:'Đổ xăng'},
-  {id:'tc05',type:'chi',loai:'Lương tài xế',ngay:'2026-04-10',gio:'13:00',sotien:20800000,hd:'',httt:'Chuyển khoản',xe:'Tất cả',taixe:'4 tài xế',kh:'',mota:'Lương tháng 3/2026'},
-  {id:'tc06',type:'chi',loai:'Sửa chữa',ngay:'2026-04-20',gio:'16:00',sotien:8500000,hd:'',httt:'Chuyển khoản',xe:'51D-45678',taixe:'',kh:'Garage Hoàng Anh',mota:'Thay lốp + phanh'},
-  {id:'tc07',type:'chi',loai:'Bảo dưỡng',ngay:'2026-04-03',gio:'10:30',sotien:3500000,hd:'',httt:'Chuyển khoản',xe:'51B-12345',taixe:'',kh:'Toyota Trường Chinh',mota:'Bảo dưỡng 50.000km'},
-  {id:'tc08',type:'chi',loai:'Cầu đường',ngay:'2026-04-08',gio:'09:00',sotien:420000,hd:'HD-2603',httt:'Tiền mặt',xe:'51C-23456',taixe:'Nguyễn Văn B',kh:'Trạm Trung Lương',mota:'Phí cao tốc'},
-  {id:'tc09',type:'thu',loai:'Thu hợp đồng',ngay:'2026-03-20',gio:'10:00',sotien:35000000,hd:'',httt:'Chuyển khoản',xe:'51B-12345',taixe:'Trần Văn A',kh:'Cty TNHH Phúc An',mota:'Thanh toán T3'},
-  {id:'tc10',type:'chi',loai:'Nhiên liệu',ngay:'2026-03-15',gio:'08:00',sotien:25000000,hd:'',httt:'Tiền mặt',xe:'Tất cả',taixe:'',kh:'Petrolimex',mota:'Nhiên liệu tháng 3'},
-];
-var DEFAULT_XE=[
-  {id:'xe01',bien:'51B-12345',loai:'Toyota Hiace',nam:2019,km:85000,dangKiem:'2026-08-15',baoHiem:'2026-09-30',tt:'dang_chay'},
-  {id:'xe02',bien:'51C-23456',loai:'Ford Transit',nam:2020,km:62000,dangKiem:'2026-05-20',baoHiem:'2026-07-15',tt:'san_sang'},
-  {id:'xe03',bien:'51A-34567',loai:'Hyundai Solati',nam:2021,km:48000,dangKiem:'2026-11-10',baoHiem:'2026-12-20',tt:'san_sang'},
-  {id:'xe04',bien:'51D-45678',loai:'Mercedes Sprinter',nam:2018,km:112000,dangKiem:'2026-04-30',baoHiem:'2026-06-01',tt:'bao_duong'},
-  {id:'xe05',bien:'51E-56789',loai:'Thaco Primas',nam:2022,km:31000,dangKiem:'2027-02-15',baoHiem:'2027-01-10',tt:'san_sang'},
-];
-var DEFAULT_TX=[
-  {id:'tx01',ten:'Trần Văn A',cmnd:'079085001234',bangLai:'B2',sdt:'0908111222',luong:8000000,chuyen:12,doanhThu:95000000},
-  {id:'tx02',ten:'Nguyễn Văn B',cmnd:'079087005678',bangLai:'D',sdt:'0909333444',luong:9500000,chuyen:10,doanhThu:88000000},
-  {id:'tx03',ten:'Phạm Văn D',cmnd:'079090009012',bangLai:'B2',sdt:'0901555666',luong:7500000,chuyen:9,doanhThu:72000000},
-  {id:'tx04',ten:'Lê Văn C',cmnd:'079092003456',bangLai:'D',sdt:'0902777888',luong:9000000,chuyen:8,doanhThu:55000000},
-];
-var DEFAULT_KH=[
-  {id:'kh01',ten:'Cty TNHH Minh Long',loai:'Doanh nghiệp',sdt:'028-3812-xxxx',hdCount:3,doanhSo:138000000},
-  {id:'kh02',ten:'THPT Nguyễn Du',loai:'Trường học',sdt:'028-3856-xxxx',hdCount:5,doanhSo:85000000},
-  {id:'kh03',ten:'Tập đoàn Hoa Sen',loai:'Doanh nghiệp',sdt:'028-3900-xxxx',hdCount:2,doanhSo:64000000},
-  {id:'kh04',ten:'Nguyễn Văn Thành',loai:'Cá nhân',sdt:'0901-234-xxx',hdCount:1,doanhSo:28000000},
-  {id:'kh05',ten:'Cty CP Vincom',loai:'Doanh nghiệp',sdt:'028-3700-xxxx',hdCount:4,doanhSo:152000000},
-];
+// Không dùng dữ liệu demo — luôn lấy từ Supabase
+var DEFAULT_HD=[];
+var DEFAULT_TC=[];
+var DEFAULT_XE=[];
+var DEFAULT_TX=[];
+var DEFAULT_KH=[];
 
 // ═══════════════════════════════════════
 // DASHBOARD MONTH STATE
@@ -436,7 +403,7 @@ function openHDDetail(id) {
 function openHDModal(id) {
   if (!requireAdmin()) return;
   var h = id ? DB.hopDong.find(function(x) { return x.id === id; }) : null; if (!h) h = {};
-  var xeOpts = ['','51B-12345','51C-23456','51A-34567','51D-45678','51E-56789'].concat(DB.xe.filter(function(x){return['51B-12345','51C-23456','51A-34567','51D-45678','51E-56789'].indexOf(x.bien)<0;}).map(function(x){return x.bien;}));
+  var xeOpts = [''].concat(DB.xe.map(function(x){return x.bien;}));
   var xeSel = xeOpts.map(function(v){return'<option'+(v===h.xe?' selected':'')+'>'+(v||'-- Chọn xe --')+'</option>';}).join('');
   var txSel = [''].concat(DB.taiXe.map(function(t){return t.ten;})).map(function(v){return'<option'+(v===h.taixe?' selected':'')+'>'+(v||'-- Chọn --')+'</option>';}).join('');
   var khList = DB.khachHang.map(function(k){return'<option value="'+k.ten+'">';}).join('');
@@ -806,11 +773,21 @@ function renderBC(){
   document.getElementById('bc-donut').style.background='conic-gradient('+conic2+')';
   document.getElementById('bc-donut-val').textContent=fmtM(chi);
   document.getElementById('bc-donut-legend').innerHTML=cats.map(function(c){return'<div class="dl-item"><div class="dl-dot" style="background:'+c.c+'"></div><span class="dl-name">'+c.n+'</span><span class="dl-val">'+fmtM(chi*c.p/100)+'</span><span class="dl-pct">'+c.p+'%</span></div>';}).join('');
-  var scale=thu/128500000;
-  var veh=[{b:'51B-12345',l:'Toyota Hiace',t:95e6,c:62e6},{b:'51C-23456',l:'Ford Transit',t:88e6,c:58.5e6},{b:'51A-34567',l:'Hyundai Solati',t:72e6,c:51e6},{b:'51D-45678',l:'Mercedes Sprinter',t:60e6,c:47e6},{b:'51E-56789',l:'Thaco Primas',t:55e6,c:44e6}];
-  document.getElementById('bc-xe-table').innerHTML=veh.map(function(v){var t2=Math.round(v.t*scale),c2=Math.round(v.c*scale),ln2=t2-c2,ts=Math.round(ln2/t2*100);var bc=ts>=30?'var(--green)':ts>=20?'var(--accent)':'var(--orange)';return'<tr><td><div style="font-weight:600;font-size:.78rem">'+v.b+'</div><div style="font-size:.67rem;color:var(--text3)">'+v.l+'</div></td><td><span class="amt-pos">+'+fmtM(t2)+'</span></td><td><span class="amt-neg">-'+fmtM(c2)+'</span></td><td style="font-weight:700;font-family:\'DM Mono\',monospace;color:var(--accent)">'+fmtM(ln2)+'</td><td><div class="mini-bar-wrap"><div class="mini-bar"><div class="mini-fill" style="width:'+ts+'%;background:'+bc+'"></div></div><span class="mini-pct">'+ts+'%</span></div></td></tr>';}).join('');
-  var drivers=[{n:'Trần Văn A',b:'51B-12345',c:12,t:95e6,chg:8.2},{n:'Nguyễn Văn B',b:'51C-23456',c:10,t:88e6,chg:5.1},{n:'Phạm Văn D',b:'51A-34567',c:9,t:72e6,chg:-2.3},{n:'Lê Văn C',b:'51E-56789',c:8,t:55e6,chg:12.7}];
-  document.getElementById('bc-driver-rank').innerHTML=drivers.map(function(d2,i){return'<div class="rank-item"><div class="rank-num '+['r1','r2','r3','rn'][i]+'">'+(['🥇','🥈','🥉',''][i]||i+1)+'</div><div class="rank-info"><div class="rank-name">'+d2.n+'</div><div class="rank-meta">'+d2.b+' · '+d2.c+' chuyến</div></div><div style="text-align:right"><div class="rank-amount">+'+fmtM(Math.round(d2.t*scale))+'</div><div class="rank-change '+(d2.chg>=0?'rc-up':'rc-dn')+'">'+(d2.chg>=0?'▲':'▼')+' '+Math.abs(d2.chg)+'%</div></div></div>';}).join('');
+  // Xe table — dữ liệu thực từ DB (không dùng demo)
+  var veh=DB.xe.map(function(x){
+    var t=DB.hopDong.filter(function(h){return h.xe===x.bien;}).reduce(function(s,h){return s+h.dathu;},0);
+    var c=DB.thuChi.filter(function(tc){return tc.type==='chi'&&tc.xe===x.bien;}).reduce(function(s,tc){return s+tc.sotien;},0);
+    return{b:x.bien,l:x.loai,t:t,c:c};
+  }).filter(function(v){return v.t>0||v.c>0;}).sort(function(a,b){return b.t-a.t;});
+  document.getElementById('bc-xe-table').innerHTML=veh.length?veh.map(function(v){var ln2=v.t-v.c,ts=v.t>0?Math.round(ln2/v.t*100):0;var bc=ts>=30?'var(--green)':ts>=20?'var(--accent)':'var(--orange)';return'<tr><td><div style="font-weight:600;font-size:.78rem">'+v.b+'</div><div style="font-size:.67rem;color:var(--text3)">'+v.l+'</div></td><td><span class="amt-pos">+'+fmtM(v.t)+'</span></td><td><span class="amt-neg">-'+fmtM(v.c)+'</span></td><td style="font-weight:700;font-family:\'DM Mono\',monospace;color:var(--accent)">'+fmtM(ln2)+'</td><td><div class="mini-bar-wrap"><div class="mini-bar"><div class="mini-fill" style="width:'+ts+'%;background:'+bc+'"></div></div><span class="mini-pct">'+ts+'%</span></div></td></tr>';}).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px;font-size:.8rem">Chưa có dữ liệu xe trong kỳ này</td></tr>';
+  // Driver rank — dữ liệu thực từ DB (không dùng demo)
+  var drivers=DB.taiXe.map(function(tx){
+    var hds=DB.hopDong.filter(function(h){return h.taixe===tx.ten;});
+    var t=hds.reduce(function(s,h){return s+h.dathu;},0);
+    var lastXe=hds.length?hds[hds.length-1].xe:'—';
+    return{n:tx.ten,b:lastXe,c:hds.length,t:t};
+  }).filter(function(d2){return d2.c>0;}).sort(function(a,b){return b.t-a.t;});
+  document.getElementById('bc-driver-rank').innerHTML=drivers.length?drivers.map(function(d2,i){return'<div class="rank-item"><div class="rank-num '+(['r1','r2','r3'][i]||'rn')+'">'+(['🥇','🥈','🥉'][i]||i+1)+'</div><div class="rank-info"><div class="rank-name">'+d2.n+'</div><div class="rank-meta">'+d2.b+' · '+d2.c+' chuyến</div></div><div style="text-align:right"><div class="rank-amount">+'+fmtM(d2.t)+'</div></div></div>';}).join(''):'<div style="padding:24px;text-align:center;color:var(--text3);font-size:.82rem">Chưa có dữ liệu tài xế trong kỳ này</div>';
 }
 
 // ═══════════════════════════════════════

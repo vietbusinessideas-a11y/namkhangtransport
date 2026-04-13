@@ -407,6 +407,12 @@
       </div>
     </div>
 
+    <!-- Số KM (chỉ hiện khi báo cáo km_dau / km_cuoi) -->
+    <div id="modal-km-row" style="display:none;padding:0 20px 12px">
+      <label id="modal-km-label" style="font-size:.74rem;font-weight:600;color:#6b6760;display:block;margin-bottom:6px">Số km đồng hồ xe <span style="color:#dc2626">*</span></label>
+      <input id="modal-km-val" type="number" class="inp" min="0" step="1" placeholder="Nhập số km hiện tại (vd: 45230)">
+    </div>
+
     <!-- Ghi chú -->
     <div style="padding:0 20px 12px">
       <label style="font-size:.74rem;font-weight:600;color:#6b6760;display:block;margin-bottom:6px">Ghi chú (tùy chọn)</label>
@@ -922,11 +928,85 @@ function populateApp(){
     }).catch(function(){/* giữ mock */});
   }
 
-  // Stats tháng
-  var monthHDs = MOCK_HD.filter(function(h){ return h.taixe===d.ten && h.ngay && h.ngay.startsWith(yyyy+'-'+mm); });
-  document.getElementById('stat-chuyen').textContent = monthHDs.length || '0';
-  document.getElementById('stat-km').textContent     = '—';
-  document.getElementById('stat-rev').textContent    = '—';
+  // Stats tháng — tải từ Supabase
+  loadMonthStats(d.ten, yyyy+'-'+mm);
+}
+
+// ─── Format tiền gọn cho driver portal ───────────────────────────────────
+function fmtDriver(n){
+  if(!n || n===0) return '0đ';
+  if(n>=1e9) return (n/1e9).toFixed(1).replace(/\.0$/,'')+'tỷ';
+  if(n>=1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'')+'tr';
+  if(n>=1e3) return (n/1e3).toFixed(0)+'k';
+  return n+'đ';
+}
+
+// ─── Tải thống kê tháng từ Supabase ──────────────────────────────────────
+function loadMonthStats(driverName, yyyymm){
+  if(!SB_URL){ return; }       // offline — giữ nguyên "—"
+
+  // Tính khoảng thời gian [đầu tháng, đầu tháng sau)
+  var parts     = yyyymm.split('-');
+  var y         = parseInt(parts[0], 10);
+  var mo        = parseInt(parts[1], 10);
+  var nextY     = mo === 12 ? y + 1 : y;
+  var nextMo    = mo === 12 ? 1 : mo + 1;
+  var pad       = function(n){ return String(n).padStart(2,'0'); };
+  var monthFrom = yyyymm + '-01T00:00:00';
+  var monthTo   = nextY + '-' + pad(nextMo) + '-01T00:00:00';
+  var txEnc     = encodeURIComponent(driverName);
+
+  // ── 1. CHUYẾN: đếm báo cáo loại hoan_thanh trong tháng ──
+  sbGet('bao_cao',
+    'select=id'
+    +'&tai_xe_ten=eq.'+txEnc
+    +'&loai=eq.hoan_thanh'
+    +'&created_at=gte.'+encodeURIComponent(monthFrom)
+    +'&created_at=lt.'+encodeURIComponent(monthTo)
+  ).then(function(rows){
+    document.getElementById('stat-chuyen').textContent = rows ? rows.length : '0';
+  }).catch(function(){ /* giữ "—" */ });
+
+  // ── 2. TỔNG KM: max(km_cuoi) − min(km_dau) trong tháng ──
+  Promise.all([
+    sbGet('bao_cao',
+      'select=so_km'
+      +'&tai_xe_ten=eq.'+txEnc
+      +'&loai=eq.km_dau'
+      +'&so_km=not.is.null'
+      +'&created_at=gte.'+encodeURIComponent(monthFrom)
+      +'&created_at=lt.'+encodeURIComponent(monthTo)
+      +'&order=so_km.asc&limit=1'
+    ),
+    sbGet('bao_cao',
+      'select=so_km'
+      +'&tai_xe_ten=eq.'+txEnc
+      +'&loai=eq.km_cuoi'
+      +'&so_km=not.is.null'
+      +'&created_at=gte.'+encodeURIComponent(monthFrom)
+      +'&created_at=lt.'+encodeURIComponent(monthTo)
+      +'&order=so_km.desc&limit=1'
+    )
+  ]).then(function(res){
+    var dau  = res[0] && res[0].length ? Number(res[0][0].so_km) : null;
+    var cuoi = res[1] && res[1].length ? Number(res[1][0].so_km) : null;
+    if(dau !== null && cuoi !== null && cuoi >= dau){
+      var diff = cuoi - dau;
+      document.getElementById('stat-km').textContent = diff.toLocaleString('vi-VN') + ' km';
+    }
+  }).catch(function(){ /* giữ "—" */ });
+
+  // ── 3. DOANH THU: tổng da_thu hợp đồng của tài xế trong tháng ──
+  sbGet('hop_dong',
+    'select=da_thu'
+    +'&tai_xe=eq.'+txEnc
+    +'&ngay_th=gte.'+yyyymm+'-01'
+    +'&ngay_th=lte.'+yyyymm+'-31'
+  ).then(function(rows){
+    if(!rows || !rows.length) return;
+    var total = rows.reduce(function(s,r){ return s + Number(r.da_thu||0); }, 0);
+    document.getElementById('stat-rev').textContent = fmtDriver(total);
+  }).catch(function(){ /* giữ "—" */ });
 }
 
 function fmtDate(d){
@@ -996,6 +1076,20 @@ function openModal(type){
   var activeHD = ACTIVE_HDS.length ? ACTIVE_HDS[0]
     : (d ? MOCK_HD.find(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; }) : null);
   document.getElementById('modal-contract').textContent = activeHD ? 'HĐ: '+activeHD.so+' · '+activeHD.kh : '';
+
+  // Hiện / ẩn ô nhập km
+  var kmRow   = document.getElementById('modal-km-row');
+  var kmLabel = document.getElementById('modal-km-label');
+  var kmVal   = document.getElementById('modal-km-val');
+  if(type === 'km_dau' || type === 'km_cuoi'){
+    kmLabel.textContent = (type === 'km_dau' ? 'Km đầu chuyến ' : 'Km cuối chuyến ');
+    kmLabel.innerHTML   += '<span style="color:#dc2626">*</span>';
+    kmRow.style.display = 'block';
+    kmVal.value = '';
+  } else {
+    kmRow.style.display = 'none';
+    kmVal.value = '';
+  }
 
   // Reset note & photos
   document.getElementById('modal-note').value = '';
@@ -1206,6 +1300,8 @@ async function saveBaoCao(anhUrls){
   // Lấy hợp đồng đang active để lưu hd_so
   var activeHD = ACTIVE_HDS.length ? ACTIVE_HDS[0]
     : MOCK_HD.find(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; });
+  var rawKm   = (document.getElementById('modal-km-val') || {}).value;
+  var soKmNum = (rawKm && rawKm.trim() !== '') ? parseInt(rawKm, 10) : null;
   var payload = {
     loai:       CURRENT_REPORT,
     hd_so:      activeHD ? activeHD.so : null,   // ← lưu số HĐ để admin xem được
@@ -1214,6 +1310,7 @@ async function saveBaoCao(anhUrls){
     tai_xe_sdt: d.sdt,
     bien_xe:    d.bienXe && d.bienXe !== '—' ? d.bienXe : (activeHD ? activeHD.xe : null),
     ghi_chu:    note || null,
+    so_km:      soKmNum,                          // ← số km đồng hồ xe (km_dau / km_cuoi)
     anh_urls:   anhUrls,
     gps_lat:    GPS ? GPS.lat : null,
     gps_lng:    GPS ? GPS.lng : null,
