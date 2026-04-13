@@ -500,7 +500,7 @@ function openXeModal(id){
   var ttOpts=['san_sang','dang_chay','bao_duong'].map(function(v){return'<option value="'+v+'"'+(x.tt===v?' selected':'')+'>'+{san_sang:'✅ Sẵn sàng',dang_chay:'🚌 Đang chạy',bao_duong:'🔧 Bảo dưỡng'}[v]+'</option>';}).join('');
   showModal(id?'Sửa thông tin xe':'Thêm xe mới',id?x.bien:'',
     '<div class="form-row"><div class="fg"><label class="fl">Biển số <span class="req">*</span></label><input class="fc" id="xf-bien" value="'+(x.bien||'')+'" placeholder="51B-12345"></div><div class="fg"><label class="fl">Loại xe <span class="req">*</span></label><input class="fc" id="xf-loai" value="'+(x.loai||'')+'" placeholder="Toyota Hiace"></div></div>'+
-    '<div class="form-row"><div class="fg"><label class="fl">Năm sản xuất</label><input type="number" class="fc" id="xf-nam" value="'+(x.nam||2020)+'"></div><div class="fg"><label class="fl">Km đã chạy</label><input type="number" class="fc" id="xf-km" value="'+(x.km||0)+'"></div></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Năm sản xuất</label><input type="number" class="fc" id="xf-nam" value="'+(x.nam||2020)+'"></div><div class="fg"><label class="fl">Km đã chạy</label><input type="text" inputmode="numeric" class="fc" id="xf-km" value="'+(x.km?fmt(x.km):'')+'" placeholder="0" oninput="fmtInput(this)"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Hạn đăng kiểm</label><input type="date" class="fc" id="xf-dk" value="'+(x.dangKiem||'')+'"></div><div class="fg"><label class="fl">Hạn bảo hiểm</label><input type="date" class="fc" id="xf-bh" value="'+(x.baoHiem||'')+'"></div></div>'+
     '<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="xf-tt">'+ttOpts+'</select></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveXe(\''+(id||'')+'\')">💾 Lưu</button>');
@@ -509,7 +509,7 @@ function saveXe(id){
   if(!requireAdmin())return;
   var bien=document.getElementById('xf-bien').value.trim(),loai=document.getElementById('xf-loai').value.trim();
   if(!bien||!loai){toast('Nhập biển số và loại xe!','error');return;}
-  var obj={id:id||uid(),bien:bien,loai:loai,nam:parseInt(document.getElementById('xf-nam').value)||2020,km:parseInt(document.getElementById('xf-km').value)||0,dangKiem:document.getElementById('xf-dk').value,baoHiem:document.getElementById('xf-bh').value,tt:document.getElementById('xf-tt').value};
+  var obj={id:id||uid(),bien:bien,loai:loai,nam:parseInt(document.getElementById('xf-nam').value)||2020,km:readMoney('xf-km'),dangKiem:document.getElementById('xf-dk').value,baoHiem:document.getElementById('xf-bh').value,tt:document.getElementById('xf-tt').value};
   var row={bien_so:bien,loai_xe:loai,nam_sx:obj.nam,km_chay:obj.km,han_dk:obj.dangKiem||null,han_bh:obj.baoHiem||null,trang_thai:obj.tt};
   (id?sbPatch('xe',id,row):sbPost('xe',row)).then(function(res){
     if(id)DB.xe=DB.xe.map(function(x){return x.id===id?obj:x;});

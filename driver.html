@@ -410,7 +410,7 @@
     <!-- Số KM (chỉ hiện khi báo cáo km_dau / km_cuoi) -->
     <div id="modal-km-row" style="display:none;padding:0 20px 12px">
       <label id="modal-km-label" style="font-size:.74rem;font-weight:600;color:#6b6760;display:block;margin-bottom:6px">Số km đồng hồ xe <span style="color:#dc2626">*</span></label>
-      <input id="modal-km-val" type="number" class="inp" min="0" step="1" placeholder="Nhập số km hiện tại (vd: 45230)">
+      <input id="modal-km-val" type="text" inputmode="numeric" class="inp" placeholder="Nhập số km hiện tại (vd: 45.230)" oninput="fmtDriverKm(this)">
     </div>
 
     <!-- Ghi chú -->
@@ -932,6 +932,17 @@ function populateApp(){
   loadMonthStats(d.ten, yyyy+'-'+mm);
 }
 
+// ─── Format số km khi nhập (dấu phân cách nghìn) ─────────────────────────
+function fmtDriverKm(el){
+  var raw = el.value.replace(/[^0-9]/g, '');
+  if(raw === ''){ el.value = ''; return; }
+  el.value = new Intl.NumberFormat('vi-VN').format(parseInt(raw, 10));
+}
+function readDriverKm(id){
+  var raw = (document.getElementById(id).value || '').replace(/[.,\s]/g, '');
+  return parseInt(raw, 10) || null;
+}
+
 // ─── Format tiền gọn cho driver portal ───────────────────────────────────
 function fmtDriver(n){
   if(!n || n===0) return '0đ';
@@ -1301,8 +1312,7 @@ async function saveBaoCao(anhUrls){
   // Lấy hợp đồng đang active để lưu hd_so
   var activeHD = ACTIVE_HDS.length ? ACTIVE_HDS[0]
     : MOCK_HD.find(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; });
-  var rawKm   = (document.getElementById('modal-km-val') || {}).value;
-  var soKmNum = (rawKm && rawKm.trim() !== '') ? parseInt(rawKm, 10) : null;
+  var soKmNum = readDriverKm('modal-km-val');   // strip dấu phân cách, trả về số nguyên hoặc null
   var payload = {
     loai:       CURRENT_REPORT,
     hd_so:      activeHD ? activeHD.so : null,   // ← lưu số HĐ để admin xem được
