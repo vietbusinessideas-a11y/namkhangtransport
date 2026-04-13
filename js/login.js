@@ -48,6 +48,9 @@ window.addEventListener('load', async () => {
   setTimeout(() => {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('auth').style.display = 'flex';
+    // Hiện footer tài xế
+    var df = document.getElementById('driver-footer');
+    if(df) df.style.display = 'block';
   }, 800);
 });
 

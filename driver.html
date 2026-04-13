@@ -417,12 +417,18 @@
 // ═══════════════════════════════════════
 // MOCK DATA & CONFIG
 // ═══════════════════════════════════════
-// Dữ liệu mẫu – được thay bằng dữ liệu thật từ Supabase
+// Dữ liệu tài xế thực tế (fallback khi Supabase offline)
+// mat_khau = 4 số cuối CCCD
 var MOCK_DRIVERS = [
-  { sdt:'0908111222', cmnd:'079085001234', ten:'Trần Văn A', bienXe:'51B-12345', bangLai:'B2' },
-  { sdt:'0909333444', cmnd:'079087005678', ten:'Nguyễn Văn B', bienXe:'51C-23456', bangLai:'D'  },
-  { sdt:'0902777888', cmnd:'079092003456', ten:'Lê Văn C',    bienXe:'51E-56789', bangLai:'D'  },
-  { sdt:'0901555666', cmnd:'079090009012', ten:'Phạm Văn D',  bienXe:'51A-34567', bangLai:'B2' },
+  { sdt:'0918202122', cccd:'79085017554', ten:'Nguyễn Anh Quốc',   bienXe:'50E-19282', bangLai:'D' },
+  { sdt:'0907713137', cccd:'79085009941', ten:'Nguyễn Kim Khôi',    bienXe:'51B-27778', bangLai:'D' },
+  { sdt:'0918121203', cccd:'79082014876', ten:'Nguyễn Đức Trọng',   bienXe:'51B-10006', bangLai:'D' },
+  { sdt:'0917581967', cccd:'92087000193', ten:'Đặng Văn Đức',       bienXe:'50F-01800', bangLai:'D' },
+  { sdt:'0902714715', cccd:'79092014727', ten:'Nguyễn Đức Huy Anh', bienXe:'50F-02820', bangLai:'D' },
+  { sdt:'0933812131', cccd:'79084031394', ten:'Nguyễn Duy Quang',   bienXe:'50F-04813', bangLai:'D' },
+  { sdt:'0938125839', cccd:'82079001727', ten:'Lê Chí Tôn',         bienXe:'50E-17903', bangLai:'D' },
+  { sdt:'0918480932', cccd:'93075005212', ten:'Lâm Duy Cường',      bienXe:'50E-37210', bangLai:'D' },
+  { sdt:'0908337399', cccd:'1234',        ten:'Lê Quốc Tuấn',       bienXe:'50F-04254', bangLai:'D' }, // ⚠️ CCCD cần kiểm tra lại
 ];
 
 var MOCK_HD = [
@@ -540,67 +546,109 @@ function showApp(){
 // LOGIN
 // ═══════════════════════════════════════
 async function doLogin(){
-  var phone = document.getElementById('login-phone').value.trim().replace(/\s/g,'');
+  var phone = document.getElementById('login-phone').value.trim().replace(/[\s\-\.]/g,'');
   var pass  = document.getElementById('login-pass').value.trim();
 
   if(!phone){ showLoginError('Vui lòng nhập số điện thoại'); return; }
-  if(!pass) { showLoginError('Vui lòng nhập mật khẩu');     return; }
+  if(!pass) { showLoginError('Vui lòng nhập mật khẩu (4 số cuối CCCD)'); return; }
+  if(!/^\d{4}$/.test(pass)){ showLoginError('Mật khẩu gồm đúng 4 chữ số (4 số cuối CCCD)'); return; }
 
   setLoginLoading(true);
   hideLoginError();
 
   try {
     var driver = null;
+    var usedSupabase = false;
 
-    // Thử lấy từ Supabase trước
+    // ── Bước 1: Thử Supabase ──────────────────────────
     if(SB_URL && SB_KEY){
       try {
-        var rows = await sbGet('tai_xe', 'so_dt=eq.'+encodeURIComponent(phone)+'&limit=1');
+        // Tìm tài xế theo số điện thoại (cột so_dt theo schema thực tế)
+        var rows = await sbGet('tai_xe',
+          'select=id,ho_ten,so_dt,cmnd,mat_khau,bien_xe,bang_lai&so_dt=eq.'+encodeURIComponent(phone)+'&limit=1'
+        );
         if(rows && rows.length){
           var r = rows[0];
-          // Xác minh mật khẩu: 4 số cuối CMND/CCCD (hoặc trường mat_khau nếu có)
-          var expected = (r.mat_khau || (r.cmnd||'').slice(-4) || '').toString();
-          if(pass === expected || pass === r.mat_khau){
-            driver = { ten: r.ho_ten, sdt: r.so_dt, cmnd: r.cmnd||'', bangLai: r.bang_lai||'', id: r.id };
-            // Tìm xe đang giao
-            var xeRow = null;
-            try {
-              var xeRows = await sbGet('xe', 'trang_thai=eq.dang_chay&limit=1');
-              // TODO: link xe ↔ tài xế bằng bảng phân công
-            } catch(ex){}
-            driver.bienXe = (xeRow && xeRow.bien_so) || '—';
+          // Lấy mật khẩu: ưu tiên cột mat_khau, fallback 4 số cuối cmnd
+          var cmndField = (r.cmnd || '').toString().trim();
+          var expectedPw = (r.mat_khau || cmndField.slice(-4) || '').toString().trim();
+
+          if(!expectedPw){
+            showLoginError('Tài khoản chưa được thiết lập mật khẩu. Liên hệ quản lý.');
+            setLoginLoading(false);
+            return;
           }
+
+          if(pass !== expectedPw){
+            showLoginError('Mật khẩu không đúng. Vui lòng thử lại.');
+            setLoginLoading(false);
+            return;
+          }
+
+          // Xác thực thành công → build driver object
+          // Schema thực tế: ho_ten, so_dt, cmnd, mat_khau, bien_xe, bang_lai
+          driver = {
+            id:      r.id,
+            ten:     r.ho_ten || 'Tài xế',
+            sdt:     r.so_dt  || phone,
+            cccd:    cmndField,
+            bangLai: r.bang_lai || '—',
+            bienXe:  r.bien_xe || '—',
+          };
+          usedSupabase = true;
+        } else {
+          // Không tìm thấy SĐT trong Supabase
+          showLoginError('Số điện thoại không tồn tại trong hệ thống.');
+          setLoginLoading(false);
+          return;
         }
       } catch(supabaseErr){
-        console.warn('Supabase err, dùng mock:', supabaseErr.message);
+        console.warn('Supabase lỗi, chuyển mock:', supabaseErr.message);
       }
     }
 
-    // Fallback mock data
-    if(!driver){
-      var mock = MOCK_DRIVERS.find(function(d){ return d.sdt === phone; });
+    // ── Bước 2: Fallback mock (chỉ khi Supabase offline) ──
+    if(!driver && !usedSupabase){
+      var mock = MOCK_DRIVERS.find(function(d){
+        return d.sdt.replace(/\s/g,'') === phone;
+      });
       if(mock){
-        var expectedPass = mock.cmnd.slice(-4); // 4 số cuối CMND
-        if(pass === expectedPass || pass === '1234' /* demo */){
-          driver = { ten: mock.ten, sdt: mock.sdt, cmnd: mock.cmnd, bangLai: mock.bangLai, bienXe: mock.bienXe, id: 'mock_'+mock.sdt };
+        var cccdStr = (mock.cccd || mock.cmnd || '');
+        var expectedPass = cccdStr.length >= 4 ? cccdStr.slice(-4) : cccdStr.padStart(4,'0');
+        if(pass !== expectedPass){
+          showLoginError('Mật khẩu không đúng (4 số cuối CCCD)');
+          setLoginLoading(false);
+          return;
         }
+        driver = {
+          id:      'mock_'+mock.sdt,
+          ten:     mock.ten,
+          sdt:     mock.sdt,
+          cccd:    cccdStr,
+          bangLai: mock.bangLai,
+          bienXe:  mock.bienXe,
+        };
+      } else {
+        showLoginError('Số điện thoại không tồn tại trong hệ thống.');
+        setLoginLoading(false);
+        return;
       }
     }
 
     if(!driver){
-      showLoginError('Số điện thoại hoặc mật khẩu không đúng');
+      showLoginError('Đăng nhập thất bại. Vui lòng thử lại.');
       setLoginLoading(false);
       return;
     }
 
-    // Lưu session
+    // ── Lưu session 12 giờ ────────────────────────────
     SESSION = { driver: driver, loginTime: Date.now() };
-    localStorage.setItem('nk_driver_session', JSON.stringify(SESSION));
-    showToast('✅ Chào mừng, '+driver.ten+'!');
+    try { localStorage.setItem('nk_driver_session', JSON.stringify(SESSION)); } catch(e){}
+    showToast('✅ Chào mừng, ' + driver.ten + '!');
     showApp();
 
   } catch(e){
-    showLoginError('Lỗi: '+e.message);
+    showLoginError('Lỗi hệ thống: ' + e.message);
   }
   setLoginLoading(false);
 }
@@ -654,7 +702,7 @@ function populateApp(){
   document.getElementById('profile-avatar').textContent = initials;
   var infoRows = [
     ['📱','Số điện thoại', d.sdt||'—'],
-    ['🪪','CMND/CCCD',     d.cmnd||'—'],
+    ['🪪','CMND/CCCD',     d.cccd||d.cmnd||'—'],
     ['🚗','Bằng lái',      d.bangLai||'—'],
     ['🚌','Xe được giao',  d.bienXe||'Chưa phân công'],
   ];
