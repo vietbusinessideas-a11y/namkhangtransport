@@ -1027,7 +1027,7 @@ async function uploadPhoto(dataUrl, fileName){
 // Lưu metadata báo cáo vào bảng bao_cao
 async function saveBaoCao(anhUrls){
   var d    = SESSION.driver;
-  var note = document.getElementById('report-note').value.trim();
+  var note = (document.getElementById('modal-note') || {}).value || '';
   var payload = {
     loai:       CURRENT_REPORT,
     tai_xe_id:  d.id && !d.id.startsWith('mock_') ? d.id : null,
