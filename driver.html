@@ -749,6 +749,8 @@ function populateApp(){
   }).join('');
 
   // Hợp đồng hôm nay — thử Supabase trước, fallback mock
+  var activeCont = document.getElementById('active-contracts');  // ← khai báo ở đây để dùng được ngay
+
   var todayHDs = MOCK_HD.filter(function(h){ return h.ngay===today && h.taixe===d.ten && h.tt==='dang_chay'; });
   if(!todayHDs.length) todayHDs = MOCK_HD.filter(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; });
 
@@ -793,7 +795,6 @@ function populateApp(){
     });
   }
 
-  var activeCont = document.getElementById('active-contracts');
   function renderActiveContracts(hdList){
     if(hdList.length){
       activeCont.innerHTML = hdList.map(function(h, i){
