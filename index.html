@@ -121,6 +121,8 @@
       <div class="tab-bar" style="margin-bottom:20px">
         <button class="tab active" onclick="switchBCTab('tongquan',this)">📊 Tổng quan</button>
         <button class="tab" onclick="switchBCTab('hopdong',this)">📋 Theo hợp đồng</button>
+        <button class="tab" onclick="switchBCTab('xe',this)">🚌 Theo xe</button>
+        <button class="tab" onclick="switchBCTab('taixe',this)">👤 Theo tài xế</button>
       </div>
 
       <!-- TỔNG QUAN -->
@@ -164,6 +166,60 @@
             <table class="dt" style="min-width:760px">
               <thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến đường</th><th>Ngày</th><th>Doanh thu</th><th>Chi phí HĐ</th><th>Lợi nhuận</th><th>Tỷ suất</th><th>Trạng thái</th></tr></thead>
               <tbody id="bc-hd-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- THEO XE -->
+      <div id="bc-panel-xe" style="display:none">
+        <div class="kpi-grid" id="bc-xe-kpi"></div>
+        <div class="toolbar">
+          <div class="search-box"><span class="search-icon">🔍</span><input type="text" id="bc-xe-search" placeholder="Tìm biển số, loại xe..." oninput="renderBCXe()"></div>
+          <select class="sel" id="bc-xe-sort" onchange="renderBCXe()">
+            <option value="ln_desc">Lợi nhuận cao → thấp</option>
+            <option value="ln_asc">Lợi nhuận thấp → cao</option>
+            <option value="dt_desc">Doanh thu cao → thấp</option>
+            <option value="chuyen_desc">Nhiều chuyến nhất</option>
+          </select>
+          <button class="btn btn-green btn-sm" onclick="exportBCXe()">📥 Xuất Excel</button>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div><div class="card-title">Hiệu suất từng Xe</div><div class="card-sub" id="bc-xe-count">0 xe</div></div>
+            <div id="bc-xe-summary" style="font-size:.75rem;font-weight:600;display:flex;gap:10px;align-items:center"></div>
+          </div>
+          <div class="table-wrap">
+            <table class="dt" style="min-width:680px">
+              <thead><tr><th>Xe</th><th>Số chuyến</th><th>Doanh thu</th><th>Chi phí</th><th>Lợi nhuận</th><th>Tỷ suất</th><th>Trạng thái</th></tr></thead>
+              <tbody id="bc-xe-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- THEO TÀI XẾ -->
+      <div id="bc-panel-taixe" style="display:none">
+        <div class="kpi-grid" id="bc-tx-kpi"></div>
+        <div class="toolbar">
+          <div class="search-box"><span class="search-icon">🔍</span><input type="text" id="bc-tx-search" placeholder="Tìm tài xế..." oninput="renderBCTaiXe()"></div>
+          <select class="sel" id="bc-tx-sort" onchange="renderBCTaiXe()">
+            <option value="ln_desc">Lợi nhuận cao → thấp</option>
+            <option value="ln_asc">Lợi nhuận thấp → cao</option>
+            <option value="dt_desc">Doanh thu cao → thấp</option>
+            <option value="chuyen_desc">Nhiều chuyến nhất</option>
+          </select>
+          <button class="btn btn-green btn-sm" onclick="exportBCTaiXe()">📥 Xuất Excel</button>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div><div class="card-title">Hiệu suất từng Tài xế</div><div class="card-sub" id="bc-tx-count">0 tài xế</div></div>
+            <div id="bc-tx-summary" style="font-size:.75rem;font-weight:600;display:flex;gap:10px;align-items:center"></div>
+          </div>
+          <div class="table-wrap">
+            <table class="dt" style="min-width:720px">
+              <thead><tr><th>Tài xế</th><th>Số chuyến</th><th>Doanh thu</th><th>Chi phí</th><th>Lợi nhuận</th><th>Tỷ suất</th><th>Tuyến chính</th></tr></thead>
+              <tbody id="bc-tx-body"></tbody>
             </table>
           </div>
         </div>

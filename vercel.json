@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/login",    "destination": "/login.html" },
+    { "source": "/driver",   "destination": "/driver.html" },
     { "source": "/",         "destination": "/index.html" }
   ],
   "headers": [
