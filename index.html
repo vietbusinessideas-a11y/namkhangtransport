@@ -44,14 +44,33 @@
   </div>
   <div class="content">
     <div class="page active" id="page-dashboard">
-      <div class="kpi-grid" id="db-kpi"></div>
-      <div class="chart-row">
-        <div class="chart-card"><div class="chart-title">Doanh thu & Chi phí</div><div class="chart-sub">6 tháng gần nhất · Triệu đồng</div><div class="legend"><div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>Thu</div><div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>Chi</div><div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Lợi nhuận</div></div><div class="bar-wrap" id="db-bar"></div></div>
-        <div class="chart-card"><div class="chart-title">Cơ cấu chi phí T4</div><div class="chart-sub">Phân bổ theo danh mục</div><div class="cat-list" id="db-cat"></div></div>
+      <!-- Bộ lọc tháng + xuất -->
+      <div class="toolbar" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:.8rem;font-weight:600;color:var(--text2)">📅 Tháng:</span>
+          <select class="sel" id="db-month-sel" onchange="setDBMonth(this.value)" style="min-width:150px"></select>
+        </div>
+        <div style="flex:1"></div>
+        <button class="btn btn-green btn-sm" onclick="exportDashboard()">📊 Xuất báo cáo</button>
       </div>
-      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px">
+      <!-- KPI tài chính -->
+      <div class="kpi-grid" id="db-kpi"></div>
+      <!-- KPI trạng thái HĐ -->
+      <div id="db-hd-status" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px"></div>
+      <!-- Biểu đồ -->
+      <div class="chart-row">
+        <div class="chart-card"><div class="chart-title">Doanh thu & Chi phí</div><div class="chart-sub" id="db-chart-sub">6 tháng gần nhất · Triệu đồng</div><div class="legend"><div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>Thu</div><div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>Chi</div><div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Lợi nhuận</div></div><div class="bar-wrap" id="db-bar"></div></div>
+        <div class="chart-card"><div class="chart-title">Cơ cấu chi phí</div><div class="chart-sub" id="db-cat-sub">Phân bổ theo danh mục</div><div class="cat-list" id="db-cat"></div></div>
+      </div>
+      <!-- HĐ gần nhất + xe -->
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-bottom:14px">
         <div class="card"><div class="card-header"><div><div class="card-title">Hợp đồng gần nhất</div><div class="card-sub">5 mới nhất</div></div><button class="btn btn-ghost btn-sm" onclick="navTo('hopdong')">Xem tất cả →</button></div><div class="table-wrap"><table class="dt" style="min-width:380px"><thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody id="db-hd"></tbody></table></div></div>
         <div class="card"><div class="card-header"><div><div class="card-title">Tình trạng xe</div><div class="card-sub">Cập nhật real-time</div></div></div><div id="db-xe" style="padding:8px 0"></div></div>
+      </div>
+      <!-- Top tài xế -->
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">🏆 Top Tài xế</div><div class="card-sub" id="db-driver-sub">Theo tháng đang xem</div></div><button class="btn btn-ghost btn-sm" onclick="navTo('xe')">Xem tất cả →</button></div>
+        <div id="db-driver-rank"></div>
       </div>
     </div>
     <div class="page" id="page-hopdong">

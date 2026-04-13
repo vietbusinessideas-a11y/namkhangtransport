@@ -39,6 +39,7 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
 .kpi-label{font-size:.74rem;color:var(--text2);font-weight:500}
 .kpi-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
 .ic-green{background:var(--green-light)}.ic-red{background:var(--red-light)}.ic-blue{background:var(--accent-light)}.ic-orange{background:var(--orange-light)}.ic-purple{background:var(--purple-light)}
+.c-purple::before{background:var(--purple)}
 .kpi-value{font-size:1.4rem;font-weight:700;letter-spacing:-.5px;font-family:"DM Mono",monospace;margin-bottom:6px}
 .kpi-footer{display:flex;align-items:center;gap:6px;font-size:.7rem;flex-wrap:wrap}
 .tag{display:inline-flex;align-items:center;gap:2px;font-weight:600;padding:2px 7px;border-radius:5px;font-size:.7rem}
