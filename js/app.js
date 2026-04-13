@@ -387,8 +387,11 @@ function openHDDetail(id) {
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 20px">' +
     [['Khách hàng',h.kh],['Tuyến đường',h.tuyen],['Ngày',fmtD(h.ngay)],['Xe',h.xe||'—'],['Tài xế',h.taixe||'—'],['Trạng thái',TTMAP[h.tt]||h.tt]].map(function(p){return'<div class="detail-item"><label>'+p[0]+'</label><div class="dv">'+p[1]+'</div></div>';}).join('') + '</div>' +
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px">' +
-    [['Giá trị',fmtM(h.giatri),'var(--text)'],['Đã thu','+'+fmtM(h.dathu),'var(--green)'],['Còn lại',cn>0?fmtM(cn):'Đã đủ',cn>0?'var(--orange)':'var(--green)']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.65rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace;color:'+p[2]+'">'+p[1]+'</div></div>';}).join('') + '</div>',
+    [['Giá trị',fmtM(h.giatri),'var(--text)'],['Đã thu','+'+fmtM(h.dathu),'var(--green)'],['Còn lại',cn>0?fmtM(cn):'Đã đủ',cn>0?'var(--orange)':'var(--green)']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.65rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace;color:'+p[2]+'">'+p[1]+'</div></div>';}).join('') + '</div>' +
+    baoCaoSectionHTML(h.so),
     '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button><button class="btn btn-accent" onclick="closeModal();openHDModal(\'' + h.id + '\')">✏️ Sửa</button>');
+  // Async load ảnh báo cáo theo số HĐ
+  if(h.so) fetchBaoCao('hd_so', h.so).then(renderBaoCaoSection);
 }
 function openHDModal(id) {
   if (!requireAdmin()) return;
@@ -952,8 +955,11 @@ function openXeDetail(id){
   var body='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'+infoRows.map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:10px"><div style="font-size:.63rem;color:var(--text3);margin-bottom:3px">'+p[0]+'</div><div style="font-size:.8rem;font-weight:600">'+p[1]+'</div></div>';}).join('')+'</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px">'+[['💰 Tổng doanh thu','<span class="amt-pos">+'+fmtM(totalRev)+'</span>'],['💸 Tổng chi phí','<span class="amt-neg">-'+fmtM(totalChi)+'</span>'],['📋 Số HĐ',hdList.length+' hợp đồng']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.68rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace">'+p[1]+'</div></div>';}).join('')+'</div>'+
     '<div style="font-weight:700;font-size:.82rem;margin-bottom:8px">📋 Lịch sử hợp đồng</div>'+
-    '<div class="table-wrap"><table class="dt" style="min-width:480px"><thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến</th><th>Ngày</th><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>'+(hdList.length?hdList.map(function(h){return'<tr><td><span class="mono">'+h.so+'</span></td><td>'+h.kh+'</td><td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td><td><span class="mono">'+fmtD(h.ngay)+'</span></td><td><span class="amt-pos">+'+fmtM(h.giatri)+'</span></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Chưa có hợp đồng</td></tr>')+'</tbody></table></div>';
+    '<div class="table-wrap"><table class="dt" style="min-width:480px"><thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến</th><th>Ngày</th><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>'+(hdList.length?hdList.map(function(h){return'<tr><td><span class="mono">'+h.so+'</span></td><td>'+h.kh+'</td><td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td><td><span class="mono">'+fmtD(h.ngay)+'</span></td><td><span class="amt-pos">+'+fmtM(h.giatri)+'</span></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Chưa có hợp đồng</td></tr>')+'</tbody></table></div>'+
+    baoCaoSectionHTML(x.bien);
   showModal('Chi tiết Xe','Biển số: '+x.bien,body,'<button class="btn btn-ghost" onclick="closeModal()">Đóng</button><button class="btn btn-green" onclick="closeModal();exportXeReport(\''+id+'\')">📥 Xuất báo cáo xe</button>');
+  // Async load ảnh báo cáo theo biển số
+  fetchBaoCao('bien_xe', x.bien).then(renderBaoCaoSection);
 }
 
 function exportXeReport(id){
@@ -977,8 +983,11 @@ function openTXDetail(id){
   var infoRows=[['👤 Họ tên',tx.ten],['📱 SĐT',tx.sdt||'—'],['🪪 CMND/CCCD',tx.cmnd||'—'],['🚗 Bằng lái',tx.bangLai||'—'],['💼 Tổng chuyến',hdList.length+' chuyến'],['💰 Tổng doanh thu','<span class="amt-pos">'+fmtM(totalRev)+'</span>']];
   var body='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'+infoRows.map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:10px"><div style="font-size:.63rem;color:var(--text3);margin-bottom:3px">'+p[0]+'</div><div style="font-size:.8rem;font-weight:600">'+p[1]+'</div></div>';}).join('')+'</div>'+
     '<div style="font-weight:700;font-size:.82rem;margin-bottom:8px">📋 Lịch sử chuyến ('+hdList.length+' hợp đồng)</div>'+
-    '<div class="table-wrap"><table class="dt" style="min-width:500px"><thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến đường</th><th>Ngày</th><th>Doanh thu</th><th>Trạng thái</th></tr></thead><tbody>'+(hdList.length?hdList.map(function(h){return'<tr><td><span class="mono">'+h.so+'</span></td><td>'+h.kh+'</td><td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td><td><span class="mono">'+fmtD(h.ngay)+'</span></td><td><span class="amt-pos">+'+fmtM(h.giatri)+'</span></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Chưa có dữ liệu</td></tr>')+'</tbody></table></div>';
+    '<div class="table-wrap"><table class="dt" style="min-width:500px"><thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến đường</th><th>Ngày</th><th>Doanh thu</th><th>Trạng thái</th></tr></thead><tbody>'+(hdList.length?hdList.map(function(h){return'<tr><td><span class="mono">'+h.so+'</span></td><td>'+h.kh+'</td><td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td><td><span class="mono">'+fmtD(h.ngay)+'</span></td><td><span class="amt-pos">+'+fmtM(h.giatri)+'</span></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Chưa có dữ liệu</td></tr>')+'</tbody></table></div>'+
+    baoCaoSectionHTML(tx.ten);
   showModal('Chi tiết Tài xế',tx.ten,body,'<button class="btn btn-ghost" onclick="closeModal()">Đóng</button><button class="btn btn-green" onclick="closeModal();exportTXReport(\''+id+'\')">📥 Xuất báo cáo TX</button>');
+  // Async load ảnh báo cáo theo SĐT tài xế
+  if(tx.sdt) fetchBaoCao('tai_xe_sdt', tx.sdt).then(renderBaoCaoSection);
 }
 
 function exportTXReport(id){
@@ -991,6 +1000,76 @@ function exportTXReport(id){
       {name:'Lịch sử chuyến',data:[['Số HĐ','Khách hàng','Tuyến đường','Ngày','Giá trị HĐ','Đã thu','Trạng thái']].concat(hdList.sort(function(a,b){return b.ngay.localeCompare(a.ngay);}).map(function(h){return[h.so,h.kh,h.tuyen,fmtD(h.ngay),h.giatri,h.dathu,h.tt];}))},
     ],'NamKhang_TaiXe_'+tx.ten.replace(/\s+/g,'_'));toast('✅ Xuất thành công!','success');}catch(e){toast('❌ '+e.message,'error');}
   },100);
+}
+
+// ═══════════════════════════════════════
+// BÁO CÁO TÀI XẾ — hiển thị trong modal
+// ═══════════════════════════════════════
+var BC_LOAI_LABEL={
+  do_dau:'⛽ Đổ dầu', km_dau:'🔢 Km đầu', km_cuoi:'🏁 Km cuối',
+  hoan_thanh:'✅ Hoàn thành', su_co:'⚠️ Sự cố', bao_cao_khac:'📄 Khác',
+  hop_dong:'📋 Hợp đồng', hanh_khach:'👥 Hành khách',
+};
+
+// Fetch danh sách báo cáo từ Supabase theo filter (hd_so | bien_xe | tai_xe_sdt)
+async function fetchBaoCao(field, value){
+  if(!SB_URL||!SB_KEY) return [];
+  try{
+    var r=await fetch(
+      SB_URL+'/rest/v1/bao_cao?'+field+'=eq.'+encodeURIComponent(value)
+        +'&order=created_at.desc&limit=50'
+        +'&select=id,loai,tai_xe_ten,tai_xe_sdt,bien_xe,ghi_chu,anh_urls,gps_lat,gps_lng,created_at',
+      {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}
+    );
+    if(!r.ok) throw new Error(r.status);
+    return r.json();
+  }catch(e){console.warn('fetchBaoCao:',e.message);return [];}
+}
+
+// Render HTML section ảnh báo cáo vào div#modal-baocao sau khi modal đã hiện
+function renderBaoCaoSection(rows){
+  var el=document.getElementById('modal-baocao');
+  if(!el) return;
+  if(!rows.length){
+    el.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3);font-size:.8rem">Chưa có ảnh báo cáo nào</div>';
+    return;
+  }
+  var html='';
+  rows.forEach(function(bc){
+    var d=new Date(bc.created_at);
+    var dStr=d.toLocaleDateString('vi-VN')+' '+d.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+    var gps=bc.gps_lat?('<a href="https://maps.google.com/?q='+bc.gps_lat+','+bc.gps_lng+'" target="_blank" style="font-size:.65rem;color:var(--accent)">📍 Xem bản đồ</a>'):'';
+    html+='<div style="margin-bottom:16px;padding:12px;background:var(--surface2);border-radius:10px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+      +'<div>'
+      +'<span style="font-size:.75rem;font-weight:700;color:var(--text)">'+(BC_LOAI_LABEL[bc.loai]||bc.loai)+'</span>'
+      +'<div style="font-size:.65rem;color:var(--text3);margin-top:1px">'+dStr+(bc.tai_xe_ten?' · '+bc.tai_xe_ten:'')+'</div>'
+      +'</div>'+gps+'</div>';
+    if(bc.ghi_chu){
+      html+='<div style="font-size:.73rem;color:var(--text2);margin-bottom:8px;padding:8px;background:var(--bg);border-radius:7px">💬 '+bc.ghi_chu+'</div>';
+    }
+    if(bc.anh_urls&&bc.anh_urls.length){
+      html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px">';
+      bc.anh_urls.forEach(function(url){
+        html+='<a href="'+url+'" target="_blank" style="display:block;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--border)">'
+          +'<img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy" '
+          +'onerror="this.style.display=\'none\'">'
+          +'</a>';
+      });
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+
+// Hộp chứa section báo cáo — thêm vào cuối body của modal
+function baoCaoSectionHTML(label){
+  return '<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:14px">'
+    +'<div style="font-weight:700;font-size:.82rem;margin-bottom:10px">📸 Ảnh báo cáo từ tài xế'+(label?' — '+label:'')+'</div>'
+    +'<div id="modal-baocao" style="min-height:40px">'
+    +'<div style="text-align:center;padding:16px;color:var(--text3);font-size:.78rem">⏳ Đang tải...</div>'
+    +'</div></div>';
 }
 
 // ═══════════════════════════════════════

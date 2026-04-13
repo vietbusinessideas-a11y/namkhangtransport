@@ -957,6 +957,79 @@ function updateSubmitBtn(){
 // ═══════════════════════════════════════
 // SUBMIT REPORT
 // ═══════════════════════════════════════
+// Chuyển dataURL → Blob để upload
+function dataURLtoBlob(dataUrl){
+  var arr = dataUrl.split(',');
+  var mime = arr[0].match(/:(.*?);/)[1];
+  var bstr = atob(arr[1]);
+  var n = bstr.length;
+  var u8 = new Uint8Array(n);
+  while(n--) u8[n] = bstr.charCodeAt(n);
+  return new Blob([u8], { type: mime });
+}
+
+// Upload 1 ảnh lên Supabase Storage, trả về public URL
+async function uploadPhoto(dataUrl, fileName){
+  var blob = dataURLtoBlob(dataUrl);
+  var d    = SESSION.driver;
+  var now  = new Date();
+  var ym   = now.getFullYear()+'-'+(String(now.getMonth()+1).padStart(2,'0'));
+  // Path: reports/YYYY-MM/taixe_sdt/report_type/timestamp_filename.jpg
+  var path = ym+'/'+d.sdt+'/'+CURRENT_REPORT+'/'
+           + now.getTime()+'_'+fileName.replace(/[^a-zA-Z0-9._-]/g,'_');
+
+  var r = await fetch(
+    SB_URL+'/storage/v1/object/reports/'+path,
+    {
+      method:  'POST',
+      headers: {
+        'apikey':        SB_KEY,
+        'Authorization': 'Bearer '+SB_KEY,
+        'Content-Type':  blob.type,
+        'x-upsert':      'true',
+      },
+      body: blob,
+    }
+  );
+  if(!r.ok){
+    var err = await r.text();
+    throw new Error('Upload ảnh thất bại: '+err);
+  }
+  // Trả về public URL
+  return SB_URL+'/storage/v1/object/public/reports/'+path;
+}
+
+// Lưu metadata báo cáo vào bảng bao_cao
+async function saveBaoCao(anhUrls){
+  var d    = SESSION.driver;
+  var note = document.getElementById('report-note').value.trim();
+  var payload = {
+    loai:       CURRENT_REPORT,
+    tai_xe_id:  d.id && !d.id.startsWith('mock_') ? d.id : null,
+    tai_xe_ten: d.ten,
+    tai_xe_sdt: d.sdt,
+    bien_xe:    d.bienXe || null,
+    ghi_chu:    note || null,
+    anh_urls:   anhUrls,
+    gps_lat:    GPS ? GPS.lat : null,
+    gps_lng:    GPS ? GPS.lng : null,
+  };
+  var r = await fetch(SB_URL+'/rest/v1/bao_cao', {
+    method:  'POST',
+    headers: {
+      'apikey':        SB_KEY,
+      'Authorization': 'Bearer '+SB_KEY,
+      'Content-Type':  'application/json',
+      'Prefer':        'return=minimal',
+    },
+    body: JSON.stringify(payload),
+  });
+  if(!r.ok){
+    var err = await r.text();
+    throw new Error('Lưu báo cáo thất bại: '+err);
+  }
+}
+
 async function submitReport(){
   if(!PHOTOS.length) return;
   var btn  = document.getElementById('submit-btn');
@@ -965,24 +1038,39 @@ async function submitReport(){
 
   btn.disabled = true;
   spin.style.display = 'inline-block';
-  txt.textContent = 'Đang gửi...';
+  txt.textContent = 'Đang tải ảnh...';
 
-  // TODO: Upload ảnh lên Supabase Storage / API
-  // Ví dụ: for each photo → fetch(SB_URL+'/storage/v1/object/reports/'+fileName, {method:'POST',...})
+  try {
+    var anhUrls = [];
 
-  // Simulate gửi 1.5s
-  await new Promise(function(res){ setTimeout(res, 1500); });
+    if(SB_URL && SB_KEY){
+      // ── Upload từng ảnh lên Supabase Storage ──
+      for(var i = 0; i < PHOTOS.length; i++){
+        txt.textContent = 'Đang tải ảnh '+(i+1)+'/'+PHOTOS.length+'...';
+        var url = await uploadPhoto(PHOTOS[i].dataUrl, PHOTOS[i].fileName || ('photo_'+i+'.jpg'));
+        anhUrls.push(url);
+      }
+      // ── Lưu metadata vào bảng bao_cao ──
+      txt.textContent = 'Đang lưu báo cáo...';
+      await saveBaoCao(anhUrls);
+    } else {
+      // Offline: chỉ báo thành công (không lưu được)
+      await new Promise(function(res){ setTimeout(res, 800); });
+      showToast('⚠️ Offline — báo cáo chưa được lưu lên server');
+    }
 
-  var count  = PHOTOS.length;
-  var type   = MODAL_TITLES[CURRENT_REPORT] || CURRENT_REPORT;
-  var driver = SESSION ? SESSION.driver.ten : '';
+    var type = MODAL_TITLES[CURRENT_REPORT] || CURRENT_REPORT;
+    closeModal();
+    showToast('✅ Đã gửi '+type+' · '+PHOTOS.length+' ảnh');
+
+  } catch(e){
+    showToast('❌ Lỗi: '+e.message);
+    console.error('submitReport:', e);
+  }
 
   spin.style.display = 'none';
   txt.textContent = 'Gửi báo cáo';
   btn.disabled = false;
-
-  closeModal();
-  showToast('✅ Đã gửi '+type+' · '+count+' ảnh');
 }
 
 // ═══════════════════════════════════════
