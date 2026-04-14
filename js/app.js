@@ -1090,7 +1090,8 @@ function renderBCXe(){
     if(!xeMap[h.xe])xeMap[h.xe]={bien:h.xe,loai:'',chuyen:0,doanhThu:0,chiPhi:0,hds:[]};
     var v=xeMap[h.xe];
     v.chuyen++;
-    v.doanhThu+=h.dathu||0;
+    // Doanh thu = giatri HĐ hoàn thành (nhất quán với quy tắc ghi nhận doanh thu)
+    if(h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan') v.doanhThu+=h.giatri||0;
     v.hds.push(h.so);
     var chi=DB.thuChi.filter(function(t){return t.type==='chi'&&(t.hd_id===h.id||t.hd===h.so)&&t.xe===h.xe;}).reduce(function(s,t){return s+t.sotien;},0);
     v.chiPhi+=chi;
@@ -1128,7 +1129,8 @@ function renderBCTaiXe(){
     if(!txMap[h.taixe])txMap[h.taixe]={ten:h.taixe,chuyen:0,doanhThu:0,chiPhi:0,tuyen:{}};
     var v=txMap[h.taixe];
     v.chuyen++;
-    v.doanhThu+=h.dathu||0;
+    // Doanh thu = giatri HĐ hoàn thành (nhất quán với quy tắc ghi nhận doanh thu)
+    if(h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan') v.doanhThu+=h.giatri||0;
     if(h.tuyen)v.tuyen[h.tuyen]=(v.tuyen[h.tuyen]||0)+1;
     var chi=DB.thuChi.filter(function(t){return t.type==='chi'&&(t.hd_id===h.id||t.hd===h.so)&&t.taixe===h.taixe;}).reduce(function(s,t){return s+t.sotien;},0);
     v.chiPhi+=chi;
@@ -1163,7 +1165,7 @@ function exportBCXe(){
       var rows=[];
       DB.xe.forEach(function(x){
         var hds=DB.hopDong.filter(function(h){return h.xe===x.bien;});
-        var dt=hds.reduce(function(s,h){return s+h.dathu;},0);
+        var dt=hds.filter(function(h){return h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan';}).reduce(function(s,h){return s+h.giatri;},0);
         var chi=DB.thuChi.filter(function(t){return t.type==='chi'&&t.xe===x.bien;}).reduce(function(s,t){return s+t.sotien;},0);
         var ln=dt-chi;var ts=dt>0?Math.round(ln/dt*100):0;
         rows.push([x.bien,x.loai||'',hds.length,dt,chi,ln,ts+'%',(hds.length>0?'Hoạt động':'Chưa dùng')]);
@@ -1182,7 +1184,7 @@ function exportBCTaiXe(){
       var rows=[];
       DB.taiXe.forEach(function(tx){
         var hds=DB.hopDong.filter(function(h){return h.taixe===tx.ten;});
-        var dt=hds.reduce(function(s,h){return s+h.dathu;},0);
+        var dt=hds.filter(function(h){return h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan';}).reduce(function(s,h){return s+h.giatri;},0);
         var chi=DB.thuChi.filter(function(t){return t.type==='chi'&&t.taixe===tx.ten;}).reduce(function(s,t){return s+t.sotien;},0);
         var ln=dt-chi;var ts=dt>0?Math.round(ln/dt*100):0;
         var topT=Object.entries(hds.reduce(function(m,h){m[h.tuyen||'']=(m[h.tuyen||'']||0)+1;return m;},{})).sort(function(a,b){return b[1]-a[1];})[0];
@@ -1249,7 +1251,8 @@ function buildBC(){
   yBars.reverse();
 
   // ymList cho donut (tháng hiện tại / các tháng trong quý / YTD)
-  var mYmList=[mBars[mBars.length-1].ym];
+  // Sau reverse(): mBars[0] = current, mBars[last] = oldest → lấy [0].ym
+  var mYmList=[mBars[0].ym];
   var qYmList=(function(){var l=[];for(var i=0;i<3;i++)l.push(_ymStr(nowY,Math.floor(nowM/3)*3+i));return l;})();
   var yYmList=(function(){var l=[];for(var i=0;i<=nowM;i++)l.push(_ymStr(nowY,i));return l;})();
 
@@ -1291,8 +1294,8 @@ function renderBC(){
   var thu=DB.hopDong.filter(function(h){return _isCompleted(h)&&_inPeriod(h.ngay||h.ngay_di||'',d.ymList);}).reduce(function(s,h){return s+h.giatri;},0);
   var chi=DB.thuChi.filter(function(tc){return tc.type==='chi'&&_inPeriod(tc.ngay||'',d.ymList);}).reduce(function(s,tc){return s+tc.sotien;},0);
   var ln=thu-chi;
-  // prev period: lấy từ bars để so sánh
-  var prev=d.bars[d.bars.length-2]||{thu:0,chi:0};
+  // prev period: bars[0]=current, bars[1]=kỳ trước (sau reverse)
+  var prev=d.bars[1]||{thu:0,chi:0};
   var thu2=prev.thu*1e6,chi2=prev.chi*1e6,ln2=(prev.thu-prev.chi)*1e6;
   var kpis=[{cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Doanh thu',val:fmtM(thu),chg:pct(thu,thu2),sub:'vs kỳ trước'},{cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Chi phí',val:fmtM(chi),chg:pct(chi,chi2),sub:'vs kỳ trước'},{cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận',val:fmtM(ln),chg:pct(ln,ln2),sub:'vs kỳ trước'},{cls:'c-purple',ic:'ic-purple',ico:'📊',lbl:'Tỷ suất LN',val:(thu>0?((ln/thu)*100).toFixed(1):'0')+'%',chg:pct(ln/thu,ln2/thu2),sub:d.lbl}];
   document.getElementById('bc-kpi').innerHTML=kpis.map(function(c,i){var up=parseFloat(c.chg)>=0;var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':c.cls==='c-blue'?'accent':'purple';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="tag '+(up?'tag-up':'tag-down')+'">'+(up?'▲':'▼')+' '+Math.abs(c.chg)+'%</span><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
