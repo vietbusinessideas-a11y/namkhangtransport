@@ -1052,20 +1052,106 @@ function exportTC(){
 function openXeDetail(id){
   var x=DB.xe.find(function(v){return v.id===id;}); if(!x)return;
   var hdList=DB.hopDong.filter(function(h){return h.xe===x.bien;}).sort(function(a,b){return b.ngay.localeCompare(a.ngay);});
+  var hdDone=hdList.filter(function(h){return h.tt==='hoan_thanh';});
   var tcList=DB.thuChi.filter(function(t){return t.xe===x.bien;});
   var totalRev=hdList.reduce(function(s,h){return s+h.giatri;},0);
   var totalChi=tcList.filter(function(t){return t.type==='chi';}).reduce(function(s,t){return s+t.sotien;},0);
   var dk=Math.round((new Date(x.dangKiem)-new Date())/864e5);
   var bh=Math.round((new Date(x.baoHiem)-new Date())/864e5);
-  var infoRows=[['🚌 Biển số',x.bien],['🏭 Loại xe',x.loai],['📅 Năm SX',x.nam],['🛣️ Km đã chạy',fmt(x.km)+' km'],['🔍 Đăng kiểm',fmtD(x.dangKiem)+(dk<60?'<div style="color:var(--orange);font-size:.65rem">⚠ Còn '+dk+' ngày</div>':'')],['🛡️ Bảo hiểm',fmtD(x.baoHiem)+(bh<60?'<div style="color:var(--orange);font-size:.65rem">⚠ Còn '+bh+' ngày</div>':'')]];
+
+  // Km display — base tĩnh, sẽ được cập nhật async từ bao_cao
+  var kmBaseHTML = '<span id="xe-km-base">'+fmt(x.km)+' km</span>'
+    +'<div id="xe-km-extra" style="font-size:.65rem;color:var(--text3);margin-top:2px">⏳ Đang tính...</div>';
+
+  var infoRows=[
+    ['🚌 Biển số',x.bien],
+    ['🏭 Loại xe',x.loai],
+    ['📅 Năm SX',x.nam],
+    ['🛣️ Km đã chạy', kmBaseHTML],
+    ['🔍 Đăng kiểm',fmtD(x.dangKiem)+(dk<60?'<div style="color:var(--orange);font-size:.65rem">⚠ Còn '+dk+' ngày</div>':'')],
+    ['🛡️ Bảo hiểm',fmtD(x.baoHiem)+(bh<60?'<div style="color:var(--orange);font-size:.65rem">⚠ Còn '+bh+' ngày</div>':'')]
+  ];
   var body='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'+infoRows.map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:10px"><div style="font-size:.63rem;color:var(--text3);margin-bottom:3px">'+p[0]+'</div><div style="font-size:.8rem;font-weight:600">'+p[1]+'</div></div>';}).join('')+'</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px">'+[['💰 Tổng doanh thu','<span class="amt-pos">+'+fmtM(totalRev)+'</span>'],['💸 Tổng chi phí','<span class="amt-neg">-'+fmtM(totalChi)+'</span>'],['📋 Số HĐ',hdList.length+' hợp đồng']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.68rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace">'+p[1]+'</div></div>';}).join('')+'</div>'+
     '<div style="font-weight:700;font-size:.82rem;margin-bottom:8px">📋 Lịch sử hợp đồng</div>'+
     '<div class="table-wrap"><table class="dt" style="min-width:480px"><thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến</th><th>Ngày</th><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>'+(hdList.length?hdList.map(function(h){return'<tr><td><span class="mono">'+h.so+'</span></td><td>'+h.kh+'</td><td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td><td><span class="mono">'+fmtD(h.ngay)+'</span></td><td><span class="amt-pos">+'+fmtM(h.giatri)+'</span></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Chưa có hợp đồng</td></tr>')+'</tbody></table></div>'+
     baoCaoSectionHTML(x.bien);
   showModal('Chi tiết Xe','Biển số: '+x.bien,body,'<button class="btn btn-ghost" onclick="closeModal()">Đóng</button><button class="btn btn-green" onclick="closeModal();exportXeReport(\''+id+'\')">📥 Xuất báo cáo xe</button>');
+
+  // ── Async: tính tổng km từ bao_cao (km_cuoi - km_dau theo từng HĐ) ──────
+  loadXeKmStats(x.km, x.bien, hdDone.length);
+
   // Async load ảnh báo cáo theo biển số
   fetchBaoCao('bien_xe', x.bien).then(renderBaoCaoSection);
+}
+
+// Tính tổng km từ cặp km_dau / km_cuoi trong bao_cao và cập nhật UI
+function loadXeKmStats(baseKm, bienSo, hdDoneCount){
+  var extraEl = document.getElementById('xe-km-extra');
+  var baseEl  = document.getElementById('xe-km-base');
+  if(!extraEl) return;
+
+  if(!SB_URL){
+    extraEl.textContent = '(Km đăng ký ban đầu)';
+    return;
+  }
+
+  var bienEnc = encodeURIComponent(bienSo);
+
+  // Lấy TẤT CẢ bản ghi km_dau và km_cuoi của xe này
+  Promise.all([
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_dau&so_km=not.is.null&select=so_km,hd_so,created_at&order=created_at.asc'),
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_cuoi&so_km=not.is.null&select=so_km,hd_so,created_at&order=created_at.asc')
+  ]).then(function(res){
+    var dauRows  = res[0] || [];
+    var cuoiRows = res[1] || [];
+
+    // Ghép cặp theo hd_so (nếu có), hoặc theo thứ tự thời gian
+    var totalKmHD = 0;
+    var pairsCount = 0;
+
+    if(dauRows.length && cuoiRows.length){
+      // Nhóm theo hd_so
+      var dauByHD = {}, cuoiByHD = {};
+      dauRows.forEach(function(r){
+        var key = r.hd_so || ('_t_'+r.created_at);
+        if(!dauByHD[key]) dauByHD[key] = r;
+      });
+      cuoiRows.forEach(function(r){
+        var key = r.hd_so || ('_t_'+r.created_at);
+        if(!cuoiByHD[key]) cuoiByHD[key] = r;
+      });
+      // Tính km cho từng cặp có đủ dau + cuoi
+      Object.keys(dauByHD).forEach(function(key){
+        if(cuoiByHD[key]){
+          var diff = Number(cuoiByHD[key].so_km) - Number(dauByHD[key].so_km);
+          if(diff > 0){ totalKmHD += diff; pairsCount++; }
+        }
+      });
+      // Fallback: nếu không ghép được theo hd_so, lấy max_cuoi - min_dau
+      if(pairsCount === 0){
+        var minDau  = Math.min.apply(null, dauRows.map(function(r){return Number(r.so_km);}));
+        var maxCuoi = Math.max.apply(null, cuoiRows.map(function(r){return Number(r.so_km);}));
+        if(maxCuoi > minDau){ totalKmHD = maxCuoi - minDau; pairsCount = 1; }
+      }
+    }
+
+    if(!extraEl) return;  // modal đã đóng
+    if(totalKmHD > 0){
+      var total = baseKm + totalKmHD;
+      baseEl.textContent = fmt(total) + ' km';
+      extraEl.innerHTML =
+        '<span style="color:var(--text3)">📌 Lúc đăng ký: '+fmt(baseKm)+' km</span><br>'
+        +'<span style="color:var(--accent)">➕ Từ '+pairsCount+' HĐ (báo cáo): '+fmt(totalKmHD)+' km</span>';
+    } else if(hdDoneCount > 0){
+      // Có HĐ hoàn thành nhưng tài xế chưa báo cáo km
+      extraEl.innerHTML = '<span style="color:var(--text3)">Km lúc đăng ký · '+hdDoneCount+' HĐ hoàn thành chưa có báo cáo km</span>';
+    } else {
+      extraEl.textContent = '(Km lúc đăng ký ban đầu)';
+    }
+  }).catch(function(){
+    if(extraEl) extraEl.textContent = '(Km lúc đăng ký ban đầu)';
+  });
 }
 
 function exportXeReport(id){
