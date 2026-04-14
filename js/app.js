@@ -78,7 +78,17 @@ var DB_MONTH = (function(){var d=new Date();return String(d.getMonth()+1).padSta
 
 function prevYM(ym){var mm=parseInt(ym.slice(0,2)),yyyy=parseInt(ym.slice(3));var d=new Date(yyyy,mm-2,1);return String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();}
 function lastYearYM(ym){return ym.slice(0,3)+(parseInt(ym.slice(3))-1);}
-function getMonthTotals(ym){var tc=DB.thuChi.filter(function(t){return getMY(t.ngay)===ym;});return{thu:tc.filter(function(t){return t.type==='thu';}).reduce(function(s,t){return s+t.sotien;},0),chi:tc.filter(function(t){return t.type==='chi';}).reduce(function(s,t){return s+t.sotien;},0)};}
+function getMonthTotals(ym){
+  // Doanh thu = giá trị HĐ ĐÃ HOÀN THÀNH trong tháng (ghi nhận theo ngày thực hiện)
+  var thu=DB.hopDong.filter(function(h){
+    return h.tt==='hoan_thanh' && getMY(h.ngay||h.ngay_di||'')===ym;
+  }).reduce(function(s,h){return s+h.giatri;},0);
+  // Chi phí = các khoản chi ghi nhận trong thu_chi
+  var chi=DB.thuChi.filter(function(t){
+    return t.type==='chi' && getMY(t.ngay)===ym;
+  }).reduce(function(s,t){return s+t.sotien;},0);
+  return {thu:thu,chi:chi};
+}
 
 function setDBMonth(ym){DB_MONTH=ym;renderDashboard();}
 function initDBMonthSel(){
@@ -121,7 +131,7 @@ function genHDSo(){
   return 'HD-'+yy+mm+dd+hh;
 }
 function pct(a,b){return b?((a-b)/b*100).toFixed(1):'0.0';}
-var TTMAP={cho_xe:'<span class="badge b-gray">Chờ thực hiện</span>',dang_chay:'<span class="badge b-blue">Đang thực hiện</span>',hoan_thanh:'<span class="badge b-green">Hoàn thành</span>',cho_thanh_toan:'<span class="badge b-yellow">Chờ TT</span>'};
+var TTMAP={cho_xe:'<span class="badge b-gray">Chờ thực hiện</span>',dang_chay:'<span class="badge b-blue">Đang thực hiện</span>',hoan_thanh:'<span class="badge b-green">Hoàn thành</span>'};
 var LOAIBADGE={'Thu hợp đồng':'b-green','Đặt cọc':'b-green','Thu khác':'b-green','Nhiên liệu':'b-orange','Sửa chữa':'b-red','Lương tài xế':'b-yellow','Cầu đường':'b-gray','Bảo dưỡng':'b-gray','Khác':'b-gray'};
 function badgeHTML(loai,type){var cls=LOAIBADGE[loai]||(type==='thu'?'b-green':'b-orange');return'<span class="badge '+cls+'">'+loai+'</span>';}
 function toast(msg,type){var wrap=document.getElementById('toastWrap');var t=document.createElement('div');t.className='toast t-'+(type||'info');t.textContent=msg;wrap.appendChild(t);requestAnimationFrame(function(){requestAnimationFrame(function(){t.classList.add('show');});});setTimeout(function(){t.classList.remove('show');setTimeout(function(){t.remove();},400);},3000);}
@@ -319,10 +329,12 @@ function renderDashboard(){
   var ymLY=lastYearYM(ym); var ly=getMonthTotals(ymLY);
   var lnCur=cur.thu-cur.chi, lnPrev=prev.thu-prev.chi, lnLY=ly.thu-ly.chi;
 
-  // Tìm tháng cao nhất / thấp nhất (trừ tháng đang xem)
+  // Tìm tháng cao nhất / thấp nhất — dùng cùng logic getMonthTotals (HĐ hoàn thành)
   var allYms={};
-  DB.thuChi.forEach(function(t){var m=getMY(t.ngay);if(!m)return;if(!allYms[m])allYms[m]={thu:0,chi:0};if(t.type==='thu')allYms[m].thu+=t.sotien;else allYms[m].chi+=t.sotien;});
-  var otherVals=Object.keys(allYms).filter(function(k){return k!==ym;}).map(function(k){return allYms[k];});
+  // Thu thập tất cả các tháng có dữ liệu (từ HĐ hoàn thành + thu_chi)
+  DB.hopDong.forEach(function(h){if(h.tt!=='hoan_thanh')return;var m=getMY(h.ngay||h.ngay_di||'');if(m)allYms[m]=1;});
+  DB.thuChi.forEach(function(t){var m=getMY(t.ngay);if(m)allYms[m]=1;});
+  var otherVals=Object.keys(allYms).filter(function(k){return k!==ym;}).map(function(k){return getMonthTotals(k);});
   var maxThu=otherVals.length?Math.max.apply(null,otherVals.map(function(v){return v.thu;})):0;
   var minThu=otherVals.filter(function(v){return v.thu>0;}).length?Math.min.apply(null,otherVals.filter(function(v){return v.thu>0;}).map(function(v){return v.thu;})):0;
   var maxLN=otherVals.length?Math.max.apply(null,otherVals.map(function(v){return v.thu-v.chi;})):0;
@@ -343,13 +355,14 @@ function renderDashboard(){
 
   // KPI trạng thái HĐ
   var hdDang=DB.hopDong.filter(function(h){return h.tt==='dang_chay';}).length;
-  var hdChoTT=DB.hopDong.filter(function(h){return h.tt==='cho_thanh_toan';}).length;
+  // Công nợ = tổng (giatri - dathu) của các HĐ hoàn thành chưa thu đủ
+  var congNo=DB.hopDong.filter(function(h){return h.tt==='hoan_thanh'&&h.giatri>h.dathu;}).reduce(function(s,h){return s+(h.giatri-h.dathu);},0);
   var hdHT=DB.hopDong.filter(function(h){return getMY(h.ngay)===ym&&h.tt==='hoan_thanh';}).length;
   var hdChoXe=DB.hopDong.filter(function(h){return h.tt==='cho_xe';}).length;
   var hdStatusEl=document.getElementById('db-hd-status');
   if(hdStatusEl){hdStatusEl.innerHTML=[
     {cls:'c-blue',ic:'ic-blue',ico:'🚌',lbl:'Đang thực hiện',val:hdDang,sub:'Chuyến đang chạy',color:'accent'},
-    {cls:'c-orange',ic:'ic-orange',ico:'⏳',lbl:'Chờ thanh toán',val:hdChoTT,sub:'Hoàn thành — chưa TT',color:'orange'},
+    {cls:'c-orange',ic:'ic-orange',ico:'💳',lbl:'Công nợ',val:fmtM(congNo),sub:'HĐ hoàn thành chưa thu đủ',color:'orange'},
     {cls:'c-green',ic:'ic-green',ico:'✅',lbl:'Hoàn thành T'+mm,val:hdHT,sub:'Đã thanh toán xong',color:'green'},
     {cls:'c-purple',ic:'ic-purple',ico:'📋',lbl:'Chờ thực hiện',val:hdChoXe,sub:'Chưa khởi hành',color:'purple'},
   ].map(function(c,i){return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s;cursor:pointer" onclick="navTo(\'hopdong\')"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+c.color+')">'+c.val+' HĐ</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');}
@@ -570,7 +583,7 @@ function openHDModal(id) {
     '</div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Xe</label><select class="fc" id="f-xe">'+xeSel+'</select></div><div class="fg"><label class="fl">Tài xế</label><select class="fc" id="f-taixe">'+txSel+'</select></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Giá trị (VNĐ) <span class="req">*</span></label><input type="text" inputmode="numeric" class="fc" id="f-giatri" value="'+(h.giatri?fmt(h.giatri):'')+'" placeholder="0" oninput="fmtInput(this)"></div><div class="fg"><label class="fl">Đã thu</label><input type="text" inputmode="numeric" class="fc" id="f-dathu" value="'+(h.dathu?fmt(h.dathu):'0')+'" placeholder="0" oninput="fmtInput(this)"></div></div>'+
-    '<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="f-tt"><option value="cho_xe"'+(h.tt==='cho_xe'?' selected':'')+'>Chờ thực hiện</option><option value="dang_chay"'+(h.tt==='dang_chay'?' selected':'')+'>Đang thực hiện</option><option value="hoan_thanh"'+(h.tt==='hoan_thanh'?' selected':'')+'>Hoàn thành</option><option value="cho_thanh_toan"'+(h.tt==='cho_thanh_toan'?' selected':'')+'>Chờ thanh toán</option></select></div>',
+    '<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="f-tt"><option value="cho_xe"'+(h.tt==='cho_xe'?' selected':'')+'>Chờ thực hiện</option><option value="dang_chay"'+(h.tt==='dang_chay'?' selected':'')+'>Đang thực hiện</option><option value="hoan_thanh"'+((h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan')?' selected':'')+'>Hoàn thành</option></select></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveHD(\''+(id||'')+'\')">💾 Lưu</button>');
   // Hiển thị badge thời lượng ngay khi mở modal
   setTimeout(updateDurationBadge, 80);
@@ -693,8 +706,8 @@ function openKHDetail(id) {
   var daThu    = hds.reduce(function(s,h){return s+h.dathu;},0);
   var conNo    = doanhThu - daThu;
   var loaiCls  = k.loai==='Doanh nghiệp'?'b-blue':k.loai==='Trường học'?'b-green':'b-gray';
-  var ttMap    = {cho_xe:'Chờ TH',dang_chay:'Đang chạy',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Chờ TT'};
-  var ttCls    = {cho_xe:'b-gray',dang_chay:'b-blue',hoan_thanh:'b-green',cho_thanh_toan:'b-orange'};
+  var ttMap    = {cho_xe:'Chờ TH',dang_chay:'Đang chạy',hoan_thanh:'Hoàn thành'};
+  var ttCls    = {cho_xe:'b-gray',dang_chay:'b-blue',hoan_thanh:'b-green'};
 
   // ---- bảng HĐ gần nhất (tối đa 8) ----
   var recentHD = hds.slice().sort(function(a,b){return (b.ngay||'').localeCompare(a.ngay||'');}).slice(0,8);
@@ -1106,11 +1119,14 @@ function exportBCTaiXe(){
 
 // ── Helpers tổng hợp dữ liệu thực theo kỳ ──────────────────────────────────
 function _ymStr(y,m){return y+'-'+String(m+1).padStart(2,'0');}
-function _sumThuThang(ymStr){
+
+// Doanh thu: chỉ tính HĐ HOÀN THÀNH trong tháng (ymStr = "2026-04")
+function _sumDoanhThuThang(ymStr){
   return DB.hopDong.filter(function(h){
-    return (h.ngay_di||h.ngay||'').slice(0,7)===ymStr;
+    return h.tt==='hoan_thanh' && (h.ngay||h.ngay_di||'').slice(0,7)===ymStr;
   }).reduce(function(s,h){return s+h.giatri;},0);
 }
+// Chi phí: từ thu_chi.type='chi'
 function _sumChiThang(ymStr){
   return DB.thuChi.filter(function(tc){
     return tc.type==='chi'&&(tc.ngay||'').slice(0,7)===ymStr;
@@ -1120,44 +1136,49 @@ function _sumChiThang(ymStr){
 function buildBC(){
   var now=new Date(),nowY=now.getFullYear(),nowM=now.getMonth();
 
-  // ── 6 tháng gần nhất ──
+  // ── 6 tháng gần nhất (push → oldest first, current last) ──
   var mBars=[];
   for(var mi=5;mi>=0;mi--){
     (function(off){
       var d2=new Date(nowY,nowM-off,1),y=d2.getFullYear(),m=d2.getMonth(),ym=_ymStr(y,m);
-      mBars.unshift({l:'T'+(m+1),thu:_sumThuThang(ym)/1e6,chi:_sumChiThang(ym)/1e6,cur:off===0,ym:ym});
+      mBars.push({l:'T'+(m+1),thu:_sumDoanhThuThang(ym)/1e6,chi:_sumChiThang(ym)/1e6,cur:off===0,ym:ym});
     })(mi);
   }
+  mBars.reverse(); // sau reverse: oldest[0] → current[last]
 
   // ── 6 quý gần nhất ──
-  var curQIdx=Math.floor(nowM/3); // 0-based
+  var curQIdx=Math.floor(nowM/3);
   var qBars=[];
   for(var qi=5;qi>=0;qi--){
     (function(off){
       var totalQ=nowY*4+curQIdx-off,qY=Math.floor(totalQ/4),qI=totalQ%4;
       var thu=0,chi=0;
-      for(var qm=0;qm<3;qm++){var ym=_ymStr(qY,qI*3+qm);thu+=_sumThuThang(ym);chi+=_sumChiThang(ym);}
-      qBars.unshift({l:"Q"+(qI+1)+"'"+(String(qY).slice(-2)),thu:thu/1e6,chi:chi/1e6,cur:off===0});
+      for(var qm=0;qm<3;qm++){var ym2=_ymStr(qY,qI*3+qm);thu+=_sumDoanhThuThang(ym2);chi+=_sumChiThang(ym2);}
+      qBars.push({l:"Q"+(qI+1)+"'"+(String(qY).slice(-2)),thu:thu/1e6,chi:chi/1e6,cur:off===0});
     })(qi);
   }
+  qBars.reverse();
 
   // ── 5 năm gần nhất ──
   var yBars=[];
   for(var yi=4;yi>=0;yi--){
     (function(off){
       var year=nowY-off,thu=0,chi=0;
-      for(var m2=0;m2<12;m2++){var ym=_ymStr(year,m2);thu+=_sumThuThang(ym);chi+=_sumChiThang(ym);}
-      yBars.unshift({l:String(year),thu:thu/1e6,chi:chi/1e6,cur:off===0});
+      for(var m3=0;m3<12;m3++){var ym3=_ymStr(year,m3);thu+=_sumDoanhThuThang(ym3);chi+=_sumChiThang(ym3);}
+      yBars.push({l:String(year),thu:thu/1e6,chi:chi/1e6,cur:off===0});
     })(yi);
   }
+  yBars.reverse();
 
-  var curM='Tháng '+(nowM+1)+'/'+nowY;
-  var curQ='Quý '+(curQIdx+1)+'/'+nowY;
-  var curY='Năm '+nowY;
+  // ymList cho donut (tháng hiện tại / các tháng trong quý / YTD)
+  var mYmList=[mBars[mBars.length-1].ym];
+  var qYmList=(function(){var l=[];for(var i=0;i<3;i++)l.push(_ymStr(nowY,Math.floor(nowM/3)*3+i));return l;})();
+  var yYmList=(function(){var l=[];for(var i=0;i<=nowM;i++)l.push(_ymStr(nowY,i));return l;})();
+
   return{
-    thang:{lbl:curM,sub:'6 tháng gần nhất',bars:mBars,ymList:[mBars[mBars.length-1].ym]},
-    quy:  {lbl:curQ,sub:'6 quý gần nhất',  bars:qBars,ymList:(function(){var l=[];for(var i=0;i<3;i++)l.push(_ymStr(nowY,Math.floor(nowM/3)*3+i));return l;})()},
-    nam:  {lbl:curY,sub:'So sánh theo năm',bars:yBars,ymList:(function(){var l=[];for(var i=0;i<=nowM;i++)l.push(_ymStr(nowY,i));return l;})()}
+    thang:{lbl:'Tháng '+(nowM+1)+'/'+nowY, sub:'6 tháng gần nhất', bars:mBars, ymList:mYmList},
+    quy:  {lbl:'Quý '+(curQIdx+1)+'/'+nowY, sub:'6 quý gần nhất',  bars:qBars, ymList:qYmList},
+    nam:  {lbl:'Năm '+nowY,                 sub:'So sánh theo năm', bars:yBars, ymList:yYmList}
   };
 }
 
@@ -1301,7 +1322,7 @@ function doExport(){
   },200);
 }
 function sheetThuChi(){var rows=[['Ngày','Giờ','Loại','Danh mục','Mô tả','Hợp đồng','Xe','Tài xế','Đối tác','Hình thức TT','Số tiền (VNĐ)']];DB.thuChi.forEach(function(t){rows.push([fmtD(t.ngay),t.gio,t.type==='thu'?'Thu':'Chi',t.loai,t.mota||'',t.hd||'',t.xe||'',t.taixe||'',t.kh||'',t.httt,(t.type==='thu'?1:-1)*t.sotien]);});return rows;}
-function sheetHopDong(){var rows=[['Số HĐ','Khách hàng','Tuyến đường','Ngày','Xe','Tài xế','Giá trị','Đã thu','Còn lại','Trạng thái']];DB.hopDong.forEach(function(h){rows.push([h.so,h.kh,h.tuyen,fmtD(h.ngay),h.xe||'',h.taixe||'',h.giatri,h.dathu,h.giatri-h.dathu,{cho_xe:'Chờ thực hiện',dang_chay:'Đang thực hiện',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Chờ thanh toán'}[h.tt]||h.tt]);});return rows;}
+function sheetHopDong(){var rows=[['Số HĐ','Khách hàng','Tuyến đường','Ngày','Xe','Tài xế','Giá trị','Đã thu','Còn lại','Trạng thái']];DB.hopDong.forEach(function(h){rows.push([h.so,h.kh,h.tuyen,fmtD(h.ngay),h.xe||'',h.taixe||'',h.giatri,h.dathu,h.giatri-h.dathu,{cho_xe:'Chờ thực hiện',dang_chay:'Đang thực hiện',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Hoàn thành'}[h.tt]||h.tt]);});return rows;}
 function sheetKhachHang(){var rows=[['Tên','Loại','Điện thoại','Số HĐ','Doanh số (VNĐ)']];DB.khachHang.forEach(function(k){rows.push([k.ten,k.loai,k.sdt,k.hdCount,k.doanhSo]);});return rows;}
 function sheetXe(){var rows=[['Biển số','Loại xe','Năm SX','Km đã chạy','Hạn đăng kiểm','Hạn bảo hiểm','Trạng thái']];DB.xe.forEach(function(x){rows.push([x.bien,x.loai,x.nam,x.km,fmtD(x.dangKiem),fmtD(x.baoHiem),{san_sang:'Sẵn sàng',dang_chay:'Đang chạy',bao_duong:'Bảo dưỡng'}[x.tt]||x.tt]);});return rows;}
 function sheetTaiXe(){var rows=[['Họ tên','SĐT','CMND/CCCD','Bằng lái','Lương CB (VNĐ)','Số chuyến T4','Doanh thu T4']];DB.taiXe.forEach(function(t){rows.push([t.ten,t.sdt,t.cmnd,t.bangLai,t.luong,t.chuyen,t.doanhThu]);});return rows;}
@@ -1358,11 +1379,11 @@ function exportDashboard(){
           ['','','',''],
           ['Trạng thái HĐ','Số lượng','',''],
           ['Đang thực hiện',DB.hopDong.filter(function(h){return h.tt==='dang_chay';}).length,'',''],
-          ['Chờ thanh toán',DB.hopDong.filter(function(h){return h.tt==='cho_thanh_toan';}).length,'',''],
+          ['Công nợ (chưa thu đủ)',DB.hopDong.filter(function(h){return h.tt==='hoan_thanh'&&h.giatri>h.dathu;}).length+' HĐ','',''],
           ['Hoàn thành T'+mm,DB.hopDong.filter(function(h){return getMY(h.ngay)===ym&&h.tt==='hoan_thanh';}).length,'',''],
           ['Chờ thực hiện',DB.hopDong.filter(function(h){return h.tt==='cho_xe';}).length,'',''],
         ]},
-        {name:'HĐ tháng '+mm,data:[['Số HĐ','Khách hàng','Tuyến','Ngày','Giá trị','Đã thu','Trạng thái']].concat(hdMonth.map(function(h){return[h.so,h.kh,h.tuyen,fmtD(h.ngay),h.giatri,h.dathu,{cho_xe:'Chờ thực hiện',dang_chay:'Đang thực hiện',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Chờ thanh toán'}[h.tt]||h.tt];}))},
+        {name:'HĐ tháng '+mm,data:[['Số HĐ','Khách hàng','Tuyến','Ngày','Giá trị','Đã thu','Trạng thái']].concat(hdMonth.map(function(h){return[h.so,h.kh,h.tuyen,fmtD(h.ngay),h.giatri,h.dathu,{cho_xe:'Chờ thực hiện',dang_chay:'Đang thực hiện',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Hoàn thành'}[h.tt]||h.tt];}))},
         {name:'Thu Chi tháng '+mm,data:[['Ngày','Loại','Danh mục','Mô tả','Số tiền (VNĐ)']].concat(tcMonth.map(function(t){return[fmtD(t.ngay),t.type==='thu'?'Thu':'Chi',t.loai,t.mota||'',(t.type==='thu'?1:-1)*t.sotien];}))},
         {name:'Top tài xế',data:[['Hạng','Tài xế','Số chuyến','Doanh thu']].concat(DB.taiXe.map(function(tx){var hds=DB.hopDong.filter(function(h){return h.taixe===tx.ten&&getMY(h.ngay)===ym;});return[0,tx.ten,hds.length,hds.reduce(function(s,h){return s+h.giatri;},0)];}).sort(function(a,b){return b[3]-a[3];}).map(function(r,i){return[i+1,r[1],r[2],r[3]];}))},
       ],'NamKhang_Dashboard_T'+mm+'_'+yyyy);
@@ -1377,7 +1398,7 @@ function exportHD(){
   var rows=DB.hopDong.filter(function(h){return(!q||[h.so,h.kh,h.tuyen,h.xe,h.taixe].join(' ').toLowerCase().includes(q.toLowerCase()))&&(!tt||h.tt===tt);});
   toast('⏳ Đang xuất Excel Hợp đồng...','info');
   setTimeout(function(){
-    try{xlsxDownload([{name:'Hợp đồng',data:[['Số HĐ','Khách hàng','Tuyến đường','Ngày','Xe','Tài xế','Giá trị','Đã thu','Còn lại','Trạng thái']].concat(rows.map(function(h){return[h.so,h.kh,h.tuyen,fmtD(h.ngay),h.xe||'',h.taixe||'',h.giatri,h.dathu,h.giatri-h.dathu,{cho_xe:'Chờ thực hiện',dang_chay:'Đang thực hiện',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Chờ thanh toán'}[h.tt]||h.tt];}))}],'NamKhang_HopDong');toast('✅ Xuất thành công!','success');}catch(e){toast('❌ '+e.message,'error');}
+    try{xlsxDownload([{name:'Hợp đồng',data:[['Số HĐ','Khách hàng','Tuyến đường','Ngày','Xe','Tài xế','Giá trị','Đã thu','Còn lại','Trạng thái']].concat(rows.map(function(h){return[h.so,h.kh,h.tuyen,fmtD(h.ngay),h.xe||'',h.taixe||'',h.giatri,h.dathu,h.giatri-h.dathu,{cho_xe:'Chờ thực hiện',dang_chay:'Đang thực hiện',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Hoàn thành'}[h.tt]||h.tt];}))}],'NamKhang_HopDong');toast('✅ Xuất thành công!','success');}catch(e){toast('❌ '+e.message,'error');}
   },100);
 }
 
