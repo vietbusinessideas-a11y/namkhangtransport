@@ -319,8 +319,15 @@ function renderDashboard(){
 // ═══════════════════════════════════════
 // SKELETON LOADER + PAGINATION
 // ═══════════════════════════════════════
-var PAGE_SIZE = 20;
+var PAGE_SIZE = 20;                  // page size mặc định cho KH, TC
+var HD_PAGE_SIZE = 10;               // page size riêng cho HĐ (mặc định 10)
 var PAGES = { hd: 1, tc: 1, kh: 1 };
+
+function setHDPageSize(val){
+  HD_PAGE_SIZE = parseInt(val) || 0; // 0 = hiển thị tất cả
+  PAGES.hd = 1;                      // reset về trang 1
+  renderHD();
+}
 
 function skelRows(cols, n) {
   var widths = [55, 90, 70, 50, 80];
@@ -354,6 +361,24 @@ function renderPager(containerId, total, page, onPageFn) {
     '<div style="display:flex;gap:5px">' + btns + '</div></div>';
 }
 
+// Pager riêng cho HĐ (hỗ trợ HD_PAGE_SIZE động)
+function renderPagerHD(containerId, total, page, pages){
+  var el = document.getElementById(containerId);
+  if(!el) return;
+  if(pages <= 1){ el.innerHTML = ''; return; }
+  var start = Math.max(1, Math.min(page-2, pages-4));
+  var end   = Math.min(pages, start+4);
+  var btns  = '';
+  if(page > 1)    btns += '<button class="btn btn-ghost btn-sm" onclick="goHDPage('+(page-1)+')">‹</button>';
+  for(var p=start; p<=end; p++){
+    btns += '<button class="btn btn-sm" style="'+(p===page?'background:var(--accent);color:#fff':'background:transparent;border:1px solid var(--border)')+'" onclick="goHDPage('+p+')">'+p+'</button>';
+  }
+  if(page < pages) btns += '<button class="btn btn-ghost btn-sm" onclick="goHDPage('+(page+1)+')">›</button>';
+  if(page > 1)           btns = '<button class="btn btn-ghost btn-sm" onclick="goHDPage(1)">«</button>' + btns;
+  if(page < pages)       btns += '<button class="btn btn-ghost btn-sm" onclick="goHDPage('+pages+')">»</button>';
+  el.innerHTML = '<div style="display:flex;gap:4px;align-items:center">'+btns+'</div>';
+}
+
 // ═══════════════════════════════════════
 // HỢP ĐỒNG
 // ═══════════════════════════════════════
@@ -364,10 +389,25 @@ function renderHD() {
   var rows = DB.hopDong.filter(function(h) {
     return (!q || [h.so,h.kh,h.tuyen,h.xe,h.taixe].join(' ').toLowerCase().includes(q)) && (!tt || h.tt === tt);
   }).sort(function(a, b) { return b.ngay.localeCompare(a.ngay); });
-  document.getElementById('hd-count').textContent = rows.length + ' hợp đồng';
+
   var total = rows.length;
-  var page = PAGES.hd;
-  var slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  var page  = PAGES.hd;
+  var ps    = HD_PAGE_SIZE;                          // 0 = hiển thị tất cả
+  var slice = ps ? rows.slice((page-1)*ps, page*ps) : rows;
+  var pages = ps ? Math.ceil(total/ps) : 1;
+
+  // Dòng thông tin "Hiển thị X–Y / Z hợp đồng"
+  document.getElementById('hd-count').textContent = total + ' hợp đồng';
+  var infoEl = document.getElementById('hd-page-info');
+  if(infoEl){
+    if(ps && total > ps){
+      var from = (page-1)*ps+1, to = Math.min(page*ps, total);
+      infoEl.textContent = 'Hiển thị '+from+'–'+to+' / '+total+' hợp đồng';
+    } else {
+      infoEl.textContent = total ? 'Hiển thị '+total+' / '+total+' hợp đồng' : '';
+    }
+  }
+
   document.getElementById('hd-body').innerHTML = slice.length ? slice.map(function(h) {
     var cn = h.giatri - h.dathu;
     return '<tr onclick="openHDDetail(\'' + h.id + '\')">' +
@@ -381,7 +421,9 @@ function renderHD() {
       '<td>' + (TTMAP[h.tt] || '') + '</td>' +
       '<td>' + (isAdmin() ? '<div class="row-acts"><button class="ic-btn" onclick="event.stopPropagation();openHDModal(\'' + h.id + '\')">✏️</button><button class="ic-btn del" onclick="event.stopPropagation();askDelete(\'Xóa HĐ ' + h.so + '?\',\'\',function(){deleteHD(\'' + h.id + '\')})">🗑️</button></div>' : '') + '</td></tr>';
   }).join('') : '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Không có hợp đồng nào</td></tr>';
-  renderPager('hd-pager', total, page, 'goHDPage');
+
+  // Render nút phân trang vào div riêng (không ghi đè info text)
+  renderPagerHD('hd-pager-btns', total, page, pages);
 }
 function openHDDetail(id) {
   var h = DB.hopDong.find(function(x) { return x.id === id; }); if (!h) return;
