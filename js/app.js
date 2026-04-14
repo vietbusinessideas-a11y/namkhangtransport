@@ -355,14 +355,14 @@ function renderDashboard(){
 
   // KPI trạng thái HĐ
   var hdDang=DB.hopDong.filter(function(h){return h.tt==='dang_chay';}).length;
-  // Công nợ = tổng (giatri - dathu) của các HĐ hoàn thành chưa thu đủ
-  var congNo=DB.hopDong.filter(function(h){return h.tt==='hoan_thanh'&&h.giatri>h.dathu;}).reduce(function(s,h){return s+(h.giatri-h.dathu);},0);
+  // Công nợ = số HĐ hoàn thành chưa thu đủ tiền
+  var congNo=DB.hopDong.filter(function(h){return h.tt==='hoan_thanh'&&h.giatri>h.dathu;}).length;
   var hdHT=DB.hopDong.filter(function(h){return getMY(h.ngay)===ym&&h.tt==='hoan_thanh';}).length;
   var hdChoXe=DB.hopDong.filter(function(h){return h.tt==='cho_xe';}).length;
   var hdStatusEl=document.getElementById('db-hd-status');
   if(hdStatusEl){hdStatusEl.innerHTML=[
     {cls:'c-blue',ic:'ic-blue',ico:'🚌',lbl:'Đang thực hiện',val:hdDang,sub:'Chuyến đang chạy',color:'accent'},
-    {cls:'c-orange',ic:'ic-orange',ico:'💳',lbl:'Công nợ',val:fmtM(congNo),sub:'HĐ hoàn thành chưa thu đủ',color:'orange'},
+    {cls:'c-orange',ic:'ic-orange',ico:'💳',lbl:'Công nợ',val:congNo,sub:'HĐ hoàn thành chưa thu đủ',color:'orange'},
     {cls:'c-green',ic:'ic-green',ico:'✅',lbl:'Hoàn thành T'+mm,val:hdHT,sub:'Đã thanh toán xong',color:'green'},
     {cls:'c-purple',ic:'ic-purple',ico:'📋',lbl:'Chờ thực hiện',val:hdChoXe,sub:'Chưa khởi hành',color:'purple'},
   ].map(function(c,i){return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s;cursor:pointer" onclick="navTo(\'hopdong\')"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+c.color+')">'+c.val+' HĐ</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');}
