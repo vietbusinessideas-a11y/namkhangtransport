@@ -303,6 +303,13 @@ function navTo(page){
   renderCurrentPage();
 }
 function renderCurrentPage(){var fns={dashboard:renderDashboard,hopdong:renderHD,khachhang:renderKH,xe:renderXe,thuchi:renderTCAll,baocao:renderBC,caidat:loadCaiDat};if(fns[currentPage])fns[currentPage]();}
+// Điều hướng đến trang HĐ và set filter trạng thái
+function navToHD(tt){
+  var sel=document.getElementById('hd-filter-tt');
+  if(sel) sel.value = tt||'';
+  PAGES.hd=1;
+  navTo('hopdong');
+}
 function updateBadges(){
   var active=DB.hopDong.filter(function(h){return h.tt!=='hoan_thanh';}).length;
   document.getElementById('hdBadge').textContent=active;
@@ -365,7 +372,7 @@ function renderDashboard(){
     {cls:'c-orange',ic:'ic-orange',ico:'💳',lbl:'Công nợ',val:congNo,sub:'HĐ hoàn thành chưa thu đủ',color:'orange'},
     {cls:'c-green',ic:'ic-green',ico:'✅',lbl:'Hoàn thành T'+mm,val:hdHT,sub:'Đã thanh toán xong',color:'green'},
     {cls:'c-purple',ic:'ic-purple',ico:'📋',lbl:'Chờ thực hiện',val:hdChoXe,sub:'Chưa khởi hành',color:'purple'},
-  ].map(function(c,i){return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s;cursor:pointer" onclick="navTo(\'hopdong\')"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+c.color+')">'+c.val+' HĐ</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');}
+  ].map(function(c,i){var ttMap=['dang_chay','cong_no','hoan_thanh','cho_xe'];return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s;cursor:pointer" onclick="navToHD(\''+ttMap[i]+'\')"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+c.color+')">'+c.val+' HĐ</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');}
 
   // Biểu đồ 6 tháng
   var months6=[];var d0=new Date(yyyy,mm-1,1);
@@ -473,7 +480,8 @@ function renderHD() {
   var q = document.getElementById('hd-search').value.toLowerCase();
   var tt = document.getElementById('hd-filter-tt').value;
   var rows = DB.hopDong.filter(function(h) {
-    return (!q || [h.so,h.kh,h.tuyen,h.xe,h.taixe].join(' ').toLowerCase().includes(q)) && (!tt || h.tt === tt);
+    var ttMatch = !tt || (tt==='cong_no' ? (h.tt==='hoan_thanh' && h.giatri > h.dathu) : h.tt===tt);
+    return (!q || [h.so,h.kh,h.tuyen,h.xe,h.taixe].join(' ').toLowerCase().includes(q)) && ttMatch;
   }).sort(function(a, b) { return b.ngay.localeCompare(a.ngay); });
 
   var total = rows.length;
