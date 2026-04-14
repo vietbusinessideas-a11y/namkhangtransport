@@ -1116,7 +1116,74 @@ function renderBCXe(){
   document.getElementById('bc-xe-kpi').innerHTML=[{cls:'c-blue',ico:'🚌',lbl:'Số xe hoạt động',val:rows.filter(function(r){return r.chuyen>0;}).length+' xe',sub:rows.length+' tổng số'},{cls:'c-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tDT),sub:'Từ hợp đồng'},{cls:'c-red',ico:'💸',lbl:'Tổng chi phí',val:fmtM(tChi),sub:'Trực tiếp + gián tiếp'},{cls:'c-blue',ico:'📈',lbl:'Tổng lợi nhuận',val:fmtM(tLN),sub:tDT>0?((tLN/tDT*100).toFixed(1)+'% tỷ suất'):''}].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':'accent';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon ic-blue">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
   document.getElementById('bc-xe-count').textContent=rows.length+' xe';
   document.getElementById('bc-xe-summary').innerHTML='<span style="color:var(--green)">↑ '+fmtM(tDT)+'</span><span style="color:var(--border)">|</span><span style="color:var(--red)">↓ '+fmtM(tChi)+'</span><span style="color:var(--border)">|</span><span style="color:var(--accent);font-weight:700">= '+fmtM(tLN)+'</span>';
-  document.getElementById('bc-xe-body').innerHTML=rows.length?rows.map(function(v){var tsColor=v.ts>=30?'var(--green)':v.ts>=15?'var(--accent)':v.ts>=0?'var(--orange)':'var(--red)';var barW=Math.min(100,Math.max(0,v.ts));return'<tr onclick="openXeDetail(\''+v.bien+'\')" style="cursor:pointer"><td><div style="font-weight:700;font-size:.82rem;letter-spacing:.5px">'+v.bien+'</div><div style="font-size:.68rem;color:var(--text3)">'+v.loai+'</div></td><td><span class="mono" style="font-weight:600">'+v.chuyen+'</span><div style="font-size:.67rem;color:var(--text3)">chuyến</div></td><td><span class="amt-pos">+'+fmtM(v.doanhThu)+'</span></td><td>'+(v.chiPhi>0?'<span class="amt-neg">-'+fmtM(v.chiPhi)+'</span>':'<span style="color:var(--text3)">—</span>')+'</td><td><span style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+(v.ln>=0?'+':'')+fmtM(v.ln)+'</span></td><td><div style="display:flex;align-items:center;gap:6px"><div style="width:50px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+tsColor+';border-radius:3px"></div></div><span style="font-size:.72rem;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+v.ts+'%</span></div></td><td><span style="font-size:.73rem;padding:3px 8px;border-radius:6px;background:var(--surface2);color:var(--text2)">'+(v.chuyen>0?'Đang hoạt động':'Chưa dùng')+'</span></td></tr>';}).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">Chưa có dữ liệu xe</td></tr>';
+  document.getElementById('bc-xe-body').innerHTML=rows.length?rows.map(function(v){var tsColor=v.ts>=30?'var(--green)':v.ts>=15?'var(--accent)':v.ts>=0?'var(--orange)':'var(--red)';var barW=Math.min(100,Math.max(0,v.ts));return'<tr onclick="openXeDetailBC(\''+encodeURIComponent(v.bien)+'\')" style="cursor:pointer" title="Xem chi tiết HĐ của '+v.bien+'"><td><div style="font-weight:700;font-size:.82rem;letter-spacing:.5px">'+v.bien+'</div><div style="font-size:.68rem;color:var(--text3)">'+v.loai+'</div></td><td><span class="mono" style="font-weight:600">'+v.chuyen+'</span><div style="font-size:.67rem;color:var(--text3)">chuyến</div></td><td><span class="amt-pos">+'+fmtM(v.doanhThu)+'</span></td><td>'+(v.chiPhi>0?'<span class="amt-neg">-'+fmtM(v.chiPhi)+'</span>':'<span style="color:var(--text3)">—</span>')+'</td><td><span style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+(v.ln>=0?'+':'')+fmtM(v.ln)+'</span></td><td><div style="display:flex;align-items:center;gap:6px"><div style="width:50px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+tsColor+';border-radius:3px"></div></div><span style="font-size:.72rem;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+v.ts+'%</span></div></td><td><span style="font-size:.73rem;padding:3px 8px;border-radius:6px;background:var(--surface2);color:var(--text2)">'+(v.chuyen>0?'Đang hoạt động':'Chưa dùng')+'</span></td></tr>';}).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">Chưa có dữ liệu xe</td></tr>';
+}
+
+// ─── Chi tiết xe theo kỳ báo cáo ────────────────────────────────────────────
+function openXeDetailBC(bienEncoded){
+  var bien=decodeURIComponent(bienEncoded);
+  var d=buildBC()[bcPeriod];
+  var ymList=d.ymList;
+  var periodLbl=d.lbl;
+  var xeInfo=DB.xe.find(function(x){return x.bien===bien;})||{bien:bien,loai:''};
+  function _isDone(h){return h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan';}
+  function _inP(h){return ymList.indexOf((h.ngay||h.ngay_di||'').slice(0,7))>=0;}
+  // Tất cả HĐ xe này trong kỳ
+  var allHds=DB.hopDong.filter(function(h){return h.xe===bien&&_inP(h);}).sort(function(a,b){return(b.ngay||'').localeCompare(a.ngay||'');});
+  // Doanh thu chỉ tính HĐ hoàn thành
+  var doanhThu=allHds.filter(_isDone).reduce(function(s,h){return s+h.giatri;},0);
+  var daThu=allHds.filter(_isDone).reduce(function(s,h){return s+h.dathu;},0);
+  var conNo=doanhThu-daThu;
+  var chiPhi=DB.thuChi.filter(function(tc){return tc.type==='chi'&&tc.xe===bien&&ymList.indexOf((tc.ngay||'').slice(0,7))>=0;}).reduce(function(s,tc){return s+tc.sotien;},0);
+  var loiNhuan=doanhThu-chiPhi;
+  var ttMap={cho_xe:'Chờ TH',dang_chay:'Đang chạy',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Hoàn thành'};
+  var ttCls={cho_xe:'b-gray',dang_chay:'b-blue',hoan_thanh:'b-green',cho_thanh_toan:'b-green'};
+  var hdRows=allHds.length
+    ?allHds.map(function(h){
+        return'<tr>'+
+          '<td style="font-family:monospace;font-size:.78rem">'+h.so+'</td>'+
+          '<td style="font-size:.8rem">'+fmtD(h.ngay||h.ngay_di||'')+'</td>'+
+          '<td style="font-size:.8rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(h.kh||'—')+'</td>'+
+          '<td style="font-size:.78rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(h.tuyen||'—')+'</td>'+
+          '<td style="font-size:.78rem;color:var(--text2)">'+(h.taixe||'—')+'</td>'+
+          '<td style="text-align:right;font-size:.82rem;font-weight:600">'+((_isDone(h)?'+':'')+fmtM(h.giatri))+'</td>'+
+          '<td style="text-align:right;font-size:.82rem;color:'+(h.dathu>=h.giatri?'var(--green)':'var(--orange)')+'">'+fmtM(h.dathu)+'</td>'+
+          '<td><span class="badge '+(ttCls[h.tt]||'b-gray')+'" style="font-size:.68rem">'+(ttMap[h.tt]||h.tt)+'</span></td>'+
+        '</tr>';
+      }).join('')
+    :'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Không có hợp đồng trong kỳ này</td></tr>';
+  showModal(
+    '🚌 '+bien,
+    periodLbl+(xeInfo.loai?' · '+xeInfo.loai:''),
+    // ── 4 ô thống kê ──
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1.4rem;font-weight:700;color:var(--blue)">'+allHds.length+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Số chuyến</div>'+
+      '</div>'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1rem;font-weight:700;color:var(--green)">'+fmtM(doanhThu)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Doanh thu (HĐ xong)</div>'+
+      '</div>'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1rem;font-weight:700;color:'+(chiPhi>0?'var(--red)':'var(--text3)')+'">'+fmtM(chiPhi)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Chi phí</div>'+
+      '</div>'+
+      '<div style="background:'+(conNo>0?'#fef2f2':'var(--bg2)')+';border-radius:8px;padding:10px;text-align:center;border:'+(conNo>0?'1px solid #fecaca':'1px solid transparent')+'">'+
+        '<div style="font-size:1rem;font-weight:700;color:'+(conNo>0?'var(--red)':loiNhuan>=0?'var(--accent)':'var(--red)')+'">'+fmtM(loiNhuan)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Lợi nhuận</div>'+
+      '</div>'+
+    '</div>'+
+    // ── Bảng HĐ ──
+    '<div style="font-weight:600;font-size:.83rem;margin-bottom:6px;color:var(--text2)">📋 Hợp đồng trong '+periodLbl+' ('+allHds.length+')</div>'+
+    '<div class="table-wrap" style="max-height:280px;overflow-y:auto;border-radius:6px;border:1px solid var(--border)">'+
+      '<table class="dt" style="min-width:580px;font-size:.82rem">'+
+        '<thead><tr><th>Số HĐ</th><th>Ngày</th><th>Khách hàng</th><th>Tuyến</th><th>Tài xế</th><th style="text-align:right">Giá trị</th><th style="text-align:right">Đã thu</th><th>Trạng thái</th></tr></thead>'+
+        '<tbody>'+hdRows+'</tbody>'+
+      '</table>'+
+    '</div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'
+  );
 }
 
 function renderBCTaiXe(){
