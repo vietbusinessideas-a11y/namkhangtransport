@@ -287,8 +287,8 @@
             <div style="font-size:.65rem;color:#a09c96;font-weight:600;margin-top:2px">TỔNG KM</div>
           </div>
           <div style="padding:16px;text-align:center">
-            <div id="stat-rev" style="font-size:1.4rem;font-weight:700;font-family:'DM Mono',monospace;color:#ea580c">—</div>
-            <div style="font-size:.65rem;color:#a09c96;font-weight:600;margin-top:2px">DOANH THU</div>
+            <div id="stat-rev" style="font-size:1.4rem;font-weight:700;font-family:'DM Mono',monospace;color:#dc2626">—</div>
+            <div style="font-size:.65rem;color:#a09c96;font-weight:600;margin-top:2px">CHI PHÍ</div>
           </div>
         </div>
       </div>
@@ -958,26 +958,31 @@ function loadMonthStats(driverName, yyyymm){
 
   var txEnc = encodeURIComponent(driverName);
 
-  // ── 1. CHUYẾN + DOANH THU: lấy hết hop_dong của tài xế trong tháng ──
-  // Truy vấn hop_dong: trang_thai hoan_thanh hoặc cho_thanh_toan trong tháng yyyymm
+  // ── 1. CHUYẾN: đếm hop_dong của tài xế trong tháng ──
   sbGet('hop_dong',
-    'select=id,gia_tri,da_thu,trang_thai,ngay_th'
+    'select=id'
     +'&tai_xe=eq.'+txEnc
     +'&ngay_th=gte.'+yyyymm+'-01'
     +'&ngay_th=lte.'+yyyymm+'-31'
   ).then(function(rows){
-    if(!rows) rows = [];
-    // Số chuyến = tất cả hợp đồng trong tháng (kể cả đang chạy, hoàn thành, chờ TT)
-    document.getElementById('stat-chuyen').textContent = rows.length;
-    // Doanh thu = ưu tiên da_thu nếu > 0, fallback gia_tri
-    var total = rows.reduce(function(s, r){
-      var thu = Number(r.da_thu) || 0;
-      var gt  = Number(r.gia_tri) || 0;
-      return s + (thu > 0 ? thu : gt);
-    }, 0);
-    document.getElementById('stat-rev').textContent = total > 0 ? fmtDriver(total) : '0đ';
+    document.getElementById('stat-chuyen').textContent = rows ? rows.length : '0';
   }).catch(function(e){
     console.warn('[NK] loadMonthStats hop_dong:', e);
+  });
+
+  // ── 2b. CHI PHÍ: tổng khoản chi gắn với tài xế trong tháng (bảng thu_chi) ──
+  sbGet('thu_chi',
+    'select=so_tien'
+    +'&tai_xe=eq.'+txEnc
+    +'&loai_gd=eq.chi'
+    +'&ngay_gd=gte.'+yyyymm+'-01'
+    +'&ngay_gd=lte.'+yyyymm+'-31'
+  ).then(function(rows){
+    if(!rows) rows = [];
+    var total = rows.reduce(function(s, r){ return s + (Number(r.so_tien) || 0); }, 0);
+    document.getElementById('stat-rev').textContent = total > 0 ? fmtDriver(total) : '0đ';
+  }).catch(function(e){
+    console.warn('[NK] loadMonthStats thu_chi:', e);
   });
 
   // ── 2. TỔNG KM: max(km_cuoi) − min(km_dau) trong tháng ──
