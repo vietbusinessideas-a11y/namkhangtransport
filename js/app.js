@@ -151,7 +151,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 // ═══════════════════════════════════════
 // LOAD DB
 // ═══════════════════════════════════════
-function mapHD(r){return{id:r.id,so:r.so_hd||'',kh:r.khach_hang||'',tuyen:r.tuyen_duong||'',ngay:r.ngay_th||'',ngay_di:r.ngay_di||'',ngay_ve:r.ngay_ve||'',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',giatri:Number(r.gia_tri)||0,dathu:Number(r.da_thu)||0,tt:r.trang_thai||'cho_xe'};}
+function mapHD(r){return{id:r.id,so:r.so_hd||'',kh:r.khach_hang||'',maKH:r.ma_kh||'',tuyen:r.tuyen_duong||'',ngay:r.ngay_th||'',ngay_di:r.ngay_di||'',ngay_ve:r.ngay_ve||'',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',giatri:Number(r.gia_tri)||0,dathu:Number(r.da_thu)||0,tt:r.trang_thai||'cho_xe'};}
 
 function calcDuration(ngay_di,ngay_ve){
   if(!ngay_di) return '';
@@ -224,6 +224,19 @@ function validateKHSync(){
     return false;
   }
   return true;
+}
+
+// ─── Helper: tìm các HĐ thuộc về một KH ─────────────────────────────────────
+// Ưu tiên so khớp theo mã (bất biến), fallback theo tên (hỗ trợ dữ liệu cũ chưa có mã)
+function hdCuaKH(k) {
+  if (k.maKH) {
+    // Có mã → dùng mã là chính; nếu HĐ chưa có mã thì fallback tên
+    return DB.hopDong.filter(function(h){
+      return h.maKH ? h.maKH === k.maKH : h.kh === k.ten;
+    });
+  }
+  // KH chưa có mã → dùng tên
+  return DB.hopDong.filter(function(h){ return h.kh === k.ten; });
 }
 
 function loadDB(){
@@ -592,8 +605,14 @@ function saveHD(id) {
   // Ghép thành "Điểm đi → Điểm đến"; nếu chỉ có một vế thì dùng vế đó
   var tuyen = diemDi && diemDen ? diemDi.trim()+' → '+diemDen.trim()
             : (diemDi||diemDen).trim();
-  var obj = {id:id||uid(),so:document.getElementById('f-so').value,kh:kh,tuyen:tuyen,ngay:document.getElementById('f-ngay').value||'',ngay_di:ngay_di,ngay_ve:ngay_ve,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,giatri:giatri,dathu:readMoney('f-dathu'),tt:document.getElementById('f-tt').value};
-  var row = {so_hd:obj.so,khach_hang:obj.kh,tuyen_duong:obj.tuyen,ngay_th:obj.ngay||null,ngay_di:obj.ngay_di||null,ngay_ve:obj.ngay_ve||null,bien_so_xe:obj.xe,tai_xe:obj.taixe,gia_tri:obj.giatri,da_thu:obj.dathu,trang_thai:obj.tt};
+  // Lấy mã KH từ ô f-ma-kh-hd hoặc tra cứu theo tên
+  var maKHHD = ((document.getElementById('f-ma-kh-hd')||{}).value||'').trim();
+  if(!maKHHD){
+    var khObj = DB.khachHang.find(function(x){return x.ten===kh;});
+    if(khObj) maKHHD = khObj.maKH||'';
+  }
+  var obj = {id:id||uid(),so:document.getElementById('f-so').value,kh:kh,maKH:maKHHD,tuyen:tuyen,ngay:document.getElementById('f-ngay').value||'',ngay_di:ngay_di,ngay_ve:ngay_ve,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,giatri:giatri,dathu:readMoney('f-dathu'),tt:document.getElementById('f-tt').value};
+  var row = {so_hd:obj.so,khach_hang:obj.kh,ma_kh:maKHHD||null,tuyen_duong:obj.tuyen,ngay_th:obj.ngay||null,ngay_di:obj.ngay_di||null,ngay_ve:obj.ngay_ve||null,bien_so_xe:obj.xe,tai_xe:obj.taixe,gia_tri:obj.giatri,da_thu:obj.dathu,trang_thai:obj.tt};
   (id ? sbPatch('hop_dong',id,row) : sbPost('hop_dong',row)).then(function(res) {
     if (id) DB.hopDong = DB.hopDong.map(function(x){return x.id===id?obj:x;});
     else { if(res&&res[0]&&res[0].id) obj.id=res[0].id; DB.hopDong.unshift(obj); }
@@ -614,7 +633,7 @@ function renderKH() {
   var rows = DB.khachHang.filter(function(k){
     return !q || k.ten.toLowerCase().includes(q) || k.sdt.includes(q) || (k.maKH||'').toLowerCase().includes(q);
   }).map(function(k){
-    var hds     = DB.hopDong.filter(function(h){ return h.kh === k.ten; });
+    var hds     = hdCuaKH(k);
     var doanhSo = hds.reduce(function(s,h){ return s + h.giatri; }, 0);
     return Object.assign({}, k, { hdCount: hds.length, doanhSo: doanhSo });
   }).sort(function(a,b){ return b.doanhSo - a.doanhSo; });
@@ -669,7 +688,7 @@ function deleteKH(id) {
 function openKHDetail(id) {
   var k = DB.khachHang.find(function(x){return x.id===id;});
   if(!k) return;
-  var hds      = DB.hopDong.filter(function(h){return h.kh===k.ten;});
+  var hds      = hdCuaKH(k);
   var doanhThu = hds.reduce(function(s,h){return s+h.giatri;},0);
   var daThu    = hds.reduce(function(s,h){return s+h.dathu;},0);
   var conNo    = doanhThu - daThu;
@@ -790,36 +809,24 @@ function saveKHEdit(id) {
     dia_chi: document.getElementById('ef-diachi').value
   };
 
-  // Bước 1: Cập nhật khach_hang
+  // Cập nhật khach_hang — chỉ cần sửa bảng KH, hop_dong tham chiếu qua ma_kh (bất biến)
   sbPatch('khach_hang', id, row)
   .then(function(){
-    // Bước 2: Nếu tên thay đổi → cập nhật khach_hang trên toàn bộ hop_dong
-    if(!tenDoi) return Promise.resolve();
-    return fetch(
-      SB_URL+'/rest/v1/hop_dong?khach_hang=eq.'+encodeURIComponent(tenCu),
-      {method:'PATCH', headers:SB_H, body:JSON.stringify({khach_hang:ten})}
-    ).then(function(r){
-      if(!r.ok) return r.text().then(function(e){throw new Error(r.status+': '+e);});
-    });
-  })
-  .then(function(){
-    // Bước 3: Cập nhật local cache
+    // Cập nhật local cache khach_hang
     DB.khachHang = DB.khachHang.map(function(x){
       return x.id===id ? Object.assign({},x,{ten:ten,loai:row.loai,sdt:row.so_dt,diaChi:row.dia_chi}) : x;
     });
+    // Cập nhật tên hiển thị trong DB.hopDong cục bộ (chỉ để UI hiện đúng tên mới ngay)
+    // Việc tìm HĐ vẫn dùng ma_kh nên đổi tên không ảnh hưởng liên kết
     if(tenDoi){
-      // Đồng bộ DB.hopDong: thay tên cũ → tên mới
       DB.hopDong = DB.hopDong.map(function(h){
-        return h.kh===tenCu ? Object.assign({},h,{kh:ten}) : h;
-      });
-      // Đồng bộ DB.thuChi (trường đối tác)
-      DB.thuChi = DB.thuChi.map(function(tc){
-        return tc.kh===tenCu ? Object.assign({},tc,{kh:ten}) : tc;
+        return h.maKH && h.maKH===khObj.maKH ? Object.assign({},h,{kh:ten}) : h;
       });
     }
     closeModal();
     renderKH();
-    toast('✅ Đã cập nhật'+( tenDoi?' (đã đồng bộ '+DB.hopDong.filter(function(h){return h.kh===ten;}).length+' HĐ)':'' ),'success');
+    var hdCount = hdCuaKH(DB.khachHang.find(function(x){return x.id===id;})||{}).length;
+    toast('✅ Đã cập nhật' + (tenDoi ? ' · ' + hdCount + ' HĐ vẫn được giữ nguyên' : ''), 'success');
   })
   .catch(function(e){toast('❌ '+e.message,'error');});
 }
@@ -1097,21 +1104,106 @@ function exportBCTaiXe(){
   },100);
 }
 
-var BC={thang:{lbl:'Tháng 4/2026',sub:'6 tháng gần nhất',bars:[{l:'T11',thu:95,chi:67},{l:'T12',thu:110,chi:75},{l:'T1',thu:85,chi:62},{l:'T2',thu:98,chi:68},{l:'T3',thu:114,chi:72},{l:'T4',thu:128.5,chi:74.2,cur:true}]},quy:{lbl:'Quý 1/2026',sub:'6 quý gần nhất',bars:[{l:"Q2'24",thu:210,chi:160},{l:"Q3'24",thu:230,chi:168},{l:"Q4'24",thu:248,chi:180},{l:"Q1'25",thu:255,chi:185},{l:"Q2'25",thu:265,chi:195},{l:"Q1'26",thu:297.5,chi:202,cur:true}]},nam:{lbl:'Năm 2026 (YTD)',sub:'So sánh năm',bars:[{l:'2022',thu:780,chi:610},{l:'2023',thu:870,chi:660},{l:'2024',thu:960,chi:720},{l:'2025',thu:1050,chi:780},{l:"'26 YTD",thu:426,chi:276,cur:true}]}};
+// ── Helpers tổng hợp dữ liệu thực theo kỳ ──────────────────────────────────
+function _ymStr(y,m){return y+'-'+String(m+1).padStart(2,'0');}
+function _sumThuThang(ymStr){
+  return DB.hopDong.filter(function(h){
+    return (h.ngay_di||h.ngay||'').slice(0,7)===ymStr;
+  }).reduce(function(s,h){return s+h.giatri;},0);
+}
+function _sumChiThang(ymStr){
+  return DB.thuChi.filter(function(tc){
+    return tc.type==='chi'&&(tc.ngay||'').slice(0,7)===ymStr;
+  }).reduce(function(s,tc){return s+tc.sotien;},0);
+}
+
+function buildBC(){
+  var now=new Date(),nowY=now.getFullYear(),nowM=now.getMonth();
+
+  // ── 6 tháng gần nhất ──
+  var mBars=[];
+  for(var mi=5;mi>=0;mi--){
+    (function(off){
+      var d2=new Date(nowY,nowM-off,1),y=d2.getFullYear(),m=d2.getMonth(),ym=_ymStr(y,m);
+      mBars.unshift({l:'T'+(m+1),thu:_sumThuThang(ym)/1e6,chi:_sumChiThang(ym)/1e6,cur:off===0,ym:ym});
+    })(mi);
+  }
+
+  // ── 6 quý gần nhất ──
+  var curQIdx=Math.floor(nowM/3); // 0-based
+  var qBars=[];
+  for(var qi=5;qi>=0;qi--){
+    (function(off){
+      var totalQ=nowY*4+curQIdx-off,qY=Math.floor(totalQ/4),qI=totalQ%4;
+      var thu=0,chi=0;
+      for(var qm=0;qm<3;qm++){var ym=_ymStr(qY,qI*3+qm);thu+=_sumThuThang(ym);chi+=_sumChiThang(ym);}
+      qBars.unshift({l:"Q"+(qI+1)+"'"+(String(qY).slice(-2)),thu:thu/1e6,chi:chi/1e6,cur:off===0});
+    })(qi);
+  }
+
+  // ── 5 năm gần nhất ──
+  var yBars=[];
+  for(var yi=4;yi>=0;yi--){
+    (function(off){
+      var year=nowY-off,thu=0,chi=0;
+      for(var m2=0;m2<12;m2++){var ym=_ymStr(year,m2);thu+=_sumThuThang(ym);chi+=_sumChiThang(ym);}
+      yBars.unshift({l:String(year),thu:thu/1e6,chi:chi/1e6,cur:off===0});
+    })(yi);
+  }
+
+  var curM='Tháng '+(nowM+1)+'/'+nowY;
+  var curQ='Quý '+(curQIdx+1)+'/'+nowY;
+  var curY='Năm '+nowY;
+  return{
+    thang:{lbl:curM,sub:'6 tháng gần nhất',bars:mBars,ymList:[mBars[mBars.length-1].ym]},
+    quy:  {lbl:curQ,sub:'6 quý gần nhất',  bars:qBars,ymList:(function(){var l=[];for(var i=0;i<3;i++)l.push(_ymStr(nowY,Math.floor(nowM/3)*3+i));return l;})()},
+    nam:  {lbl:curY,sub:'So sánh theo năm',bars:yBars,ymList:(function(){var l=[];for(var i=0;i<=nowM;i++)l.push(_ymStr(nowY,i));return l;})()}
+  };
+}
+
+// ── Cơ cấu chi phí thực theo danh mục ──────────────────────────────────────
+var _CAT_COLORS={'Nhiên liệu':'#2563eb','Lương tài xế':'#16a34a','Sửa chữa':'#ea580c','Cầu đường':'#ca8a04','Bảo dưỡng':'#7c3aed','Khác':'#94a3b8'};
+function _chiCats(ymList){
+  var totals={};
+  DB.thuChi.forEach(function(tc){
+    if(tc.type!=='chi') return;
+    if(ymList.indexOf((tc.ngay||'').slice(0,7))<0) return;
+    var cat=tc.loai||'Khác';
+    totals[cat]=(totals[cat]||0)+tc.sotien;
+  });
+  var total=0;
+  var keys=Object.keys(totals);
+  keys.forEach(function(k){total+=totals[k];});
+  if(!total) return [];
+  return keys.map(function(n){
+    return{n:n,v:totals[n],p:Math.round(totals[n]/total*100),c:_CAT_COLORS[n]||'#94a3b8'};
+  }).sort(function(a,b){return b.v-a.v;});
+}
 function setBCPeriod(p,el){bcPeriod=p;document.querySelectorAll('#page-baocao .ptab').forEach(function(t){t.classList.remove('active');});el.classList.add('active');renderBC();}
 function renderBC(){
-  var d=BC[bcPeriod];document.getElementById('bc-period-lbl').textContent=d.lbl;document.getElementById('bc-chart-sub').textContent=d.sub;document.getElementById('bc-xe-sub').textContent=d.lbl;
+  var d=buildBC()[bcPeriod];
+  document.getElementById('bc-period-lbl').textContent=d.lbl;
+  document.getElementById('bc-chart-sub').textContent=d.sub;
+  document.getElementById('bc-xe-sub').textContent=d.lbl;
   var cur=d.bars[d.bars.length-1];var prev=d.bars[d.bars.length-2]||{thu:0,chi:0};
   var thu=cur.thu*1e6,chi=cur.chi*1e6,ln=(cur.thu-cur.chi)*1e6,thu2=prev.thu*1e6,chi2=prev.chi*1e6,ln2=(prev.thu-prev.chi)*1e6;
-  var kpis=[{cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Doanh thu',val:fmtM(thu),chg:pct(thu,thu2),sub:'vs kỳ trước'},{cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Chi phí',val:fmtM(chi),chg:pct(chi,chi2),sub:'vs kỳ trước'},{cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận',val:fmtM(ln),chg:pct(ln,ln2),sub:'vs kỳ trước'},{cls:'c-purple',ic:'ic-purple',ico:'📊',lbl:'Tỷ suất LN',val:((ln/thu)*100).toFixed(1)+'%',chg:pct(ln/thu,ln2/thu2),sub:d.lbl}];
+  var kpis=[{cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Doanh thu',val:fmtM(thu),chg:pct(thu,thu2),sub:'vs kỳ trước'},{cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Chi phí',val:fmtM(chi),chg:pct(chi,chi2),sub:'vs kỳ trước'},{cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận',val:fmtM(ln),chg:pct(ln,ln2),sub:'vs kỳ trước'},{cls:'c-purple',ic:'ic-purple',ico:'📊',lbl:'Tỷ suất LN',val:(thu>0?((ln/thu)*100).toFixed(1):'0')+'%',chg:pct(ln/thu,ln2/thu2),sub:d.lbl}];
   document.getElementById('bc-kpi').innerHTML=kpis.map(function(c,i){var up=parseFloat(c.chg)>=0;var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':c.cls==='c-blue'?'accent':'purple';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="tag '+(up?'tag-up':'tag-down')+'">'+(up?'▲':'▼')+' '+Math.abs(c.chg)+'%</span><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
   var mx=Math.max.apply(null,d.bars.map(function(b){return Math.max(b.thu,b.chi);}));mx=mx||1;
-  document.getElementById('bc-bar').innerHTML=d.bars.map(function(b){var th=Math.max(3,Math.round(b.thu/mx*100));var ch=Math.max(b.chi?3:0,Math.round(b.chi/mx*100));var lp=Math.max(b.thu-b.chi>0?3:0,Math.round((b.thu-b.chi)/mx*100));return'<div class="bar-group"><div class="bars"><div class="bar" style="height:'+th+'%;background:'+(b.cur?'#15803d':'#86efac')+'"></div><div class="bar" style="height:'+ch+'%;background:'+(b.cur?'#ef4444':'#fca5a5')+'"></div><div class="bar" style="height:'+lp+'%;background:'+(b.cur?'#64748b':'#cbd5e1')+'"></div></div><div class="bar-lbl" style="'+(b.cur?'color:var(--green);font-weight:700':'')+'">'+b.l+(b.cur?' ●':'')+'</div></div>';}).join('');
-  var cats=[{n:'Nhiên liệu',p:38,c:'#2563eb'},{n:'Lương TX',p:28,c:'#16a34a'},{n:'Sửa chữa',p:18,c:'#ea580c'},{n:'Cầu đường',p:10,c:'#ca8a04'},{n:'Khác',p:6,c:'#94a3b8'}];
-  var conic2='',acc2=0;cats.forEach(function(c,i){conic2+=c.c+' '+acc2+'% '+(acc2+c.p)+'%'+(i<cats.length-1?',':'');acc2+=c.p;});
-  document.getElementById('bc-donut').style.background='conic-gradient('+conic2+')';
-  document.getElementById('bc-donut-val').textContent=fmtM(chi);
-  document.getElementById('bc-donut-legend').innerHTML=cats.map(function(c){return'<div class="dl-item"><div class="dl-dot" style="background:'+c.c+'"></div><span class="dl-name">'+c.n+'</span><span class="dl-val">'+fmtM(chi*c.p/100)+'</span><span class="dl-pct">'+c.p+'%</span></div>';}).join('');
+  document.getElementById('bc-bar').innerHTML=d.bars.map(function(b){var th=Math.max(b.thu>0?3:0,Math.round(b.thu/mx*100));var ch=Math.max(b.chi>0?3:0,Math.round(b.chi/mx*100));var lp=Math.max(b.thu-b.chi>0?3:0,Math.round((b.thu-b.chi)/mx*100));return'<div class="bar-group"><div class="bars"><div class="bar" style="height:'+th+'%;background:'+(b.cur?'#15803d':'#86efac')+'"></div><div class="bar" style="height:'+ch+'%;background:'+(b.cur?'#ef4444':'#fca5a5')+'"></div><div class="bar" style="height:'+lp+'%;background:'+(b.cur?'#64748b':'#cbd5e1')+'"></div></div><div class="bar-lbl" style="'+(b.cur?'color:var(--green);font-weight:700':'')+'">'+b.l+(b.cur?' ●':'')+'</div></div>';}).join('');
+  // ── Cơ cấu chi phí — dữ liệu THỰC từ DB.thuChi ──
+  var cats=_chiCats(d.ymList);
+  if(cats.length===0){
+    document.getElementById('bc-donut').style.background='#e2e8f0';
+    document.getElementById('bc-donut-val').textContent='0đ';
+    document.getElementById('bc-donut-legend').innerHTML='<div style="padding:16px 0;text-align:center;color:var(--text3);font-size:.8rem">Chưa có chi phí ghi nhận trong kỳ này</div>';
+  } else {
+    var conic2='',acc2=0;
+    cats.forEach(function(c,i){conic2+=c.c+' '+acc2+'% '+(acc2+c.p)+'%'+(i<cats.length-1?',':'');acc2+=c.p;});
+    document.getElementById('bc-donut').style.background='conic-gradient('+conic2+')';
+    document.getElementById('bc-donut-val').textContent=fmtM(chi);
+    document.getElementById('bc-donut-legend').innerHTML=cats.map(function(c){return'<div class="dl-item"><div class="dl-dot" style="background:'+c.c+'"></div><span class="dl-name">'+c.n+'</span><span class="dl-val">'+fmtM(c.v)+'</span><span class="dl-pct">'+c.p+'%</span></div>';}).join('');
+  }
   // Xe table — dữ liệu thực từ DB (không dùng demo)
   var veh=DB.xe.map(function(x){
     var t=DB.hopDong.filter(function(h){return h.xe===x.bien;}).reduce(function(s,h){return s+h.dathu;},0);
