@@ -106,6 +106,14 @@ function readMoney(id){
 function fmtD(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function getMY(d){if(!d)return'';var p=d.split('-');return p[1]+'/'+p[0];}
 function uid(){return'id'+Date.now()+Math.random().toString(36).slice(2,5);}
+function genHDSo(){
+  var n=new Date();
+  var yy=String(n.getFullYear()).slice(-2);
+  var mm=String(n.getMonth()+1).padStart(2,'0');
+  var dd=String(n.getDate()).padStart(2,'0');
+  var hh=String(n.getHours()).padStart(2,'0');
+  return 'HD-'+yy+mm+dd+hh;
+}
 function pct(a,b){return b?((a-b)/b*100).toFixed(1):'0.0';}
 var TTMAP={cho_xe:'<span class="badge b-gray">Chờ thực hiện</span>',dang_chay:'<span class="badge b-blue">Đang thực hiện</span>',hoan_thanh:'<span class="badge b-green">Hoàn thành</span>',cho_thanh_toan:'<span class="badge b-yellow">Chờ TT</span>'};
 var LOAIBADGE={'Thu hợp đồng':'b-green','Đặt cọc':'b-green','Thu khác':'b-green','Nhiên liệu':'b-orange','Sửa chữa':'b-red','Lương tài xế':'b-yellow','Cầu đường':'b-gray','Bảo dưỡng':'b-gray','Khác':'b-gray'};
@@ -410,7 +418,7 @@ function openHDModal(id) {
   var today = new Date().toISOString().slice(0,10);
   showModal(id?'Sửa HĐ':'Thêm HĐ mới', id?h.so:'',
     '<datalist id="kh-list">'+khList+'</datalist>'+
-    '<div class="form-row"><div class="fg"><label class="fl">Số HĐ</label><input class="fc" id="f-so" value="'+(h.so||'HD-'+Date.now().toString().slice(-4))+'"></div><div class="fg"><label class="fl">Ngày ký</label><input type="date" class="fc" id="f-ngay" value="'+(h.ngay||today)+'"></div></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Số HĐ</label><input class="fc" id="f-so" value="'+(h.so||genHDSo())+'"></div><div class="fg"><label class="fl">Ngày ký</label><input type="date" class="fc" id="f-ngay" value="'+(h.ngay||today)+'"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Ngày đi <span class="req">*</span></label><input type="date" class="fc" id="f-ngay-di" value="'+(h.ngay_di||today)+'" oninput="updateDurationBadge()"></div><div class="fg"><label class="fl">Ngày về</label><input type="date" class="fc" id="f-ngay-ve" value="'+(h.ngay_ve||'')+'" oninput="updateDurationBadge()"></div></div>'+
     '<div id="duration-badge" style="margin:-6px 0 10px;font-size:.75rem;font-weight:700;color:#2563eb;min-height:18px"></div>'+
     '<div class="fg"><label class="fl">Khách hàng <span class="req">*</span></label><input class="fc" id="f-kh" value="'+(h.kh||'')+'" placeholder="Gõ để tìm..." list="kh-list" autocomplete="off"></div>'+

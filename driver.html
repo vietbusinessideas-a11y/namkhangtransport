@@ -969,65 +969,68 @@ function fmtDriver(n){
 
 // ─── Tải thống kê tháng từ Supabase ──────────────────────────────────────
 function loadMonthStats(driverName, yyyymm){
-  if(!SB_URL || !SB_KEY){ return; }   // offline — giữ nguyên "—"
+  if(!SB_URL || !SB_KEY){ return; }
 
-  var txEnc = encodeURIComponent(driverName);
+  // Tính ngày đầu và cuối tháng đúng (tránh lỗi "31" khi tháng chỉ có 30 ngày)
+  var parts   = yyyymm.split('-');
+  var y       = parseInt(parts[0], 10);
+  var mo      = parseInt(parts[1], 10);
+  var pad     = function(n){ return String(n).padStart(2,'0'); };
+  var nextY   = mo === 12 ? y + 1 : y;
+  var nextMo  = mo === 12 ? 1 : mo + 1;
+  var dateFrom = yyyymm + '-01';                              // vd: 2026-04-01
+  var dateTo   = nextY + '-' + pad(nextMo) + '-01';          // vd: 2026-05-01 (exclusive)
+  var dtFrom   = encodeURIComponent(dateFrom + 'T00:00:00'); // cho created_at
+  var dtTo     = encodeURIComponent(dateTo   + 'T00:00:00');
+  var txEnc    = encodeURIComponent(driverName);
 
-  // ── 1. CHUYẾN: đếm hop_dong của tài xế trong tháng ──
+  // ── 1. CHUYẾN: đếm hop_dong của tài xế trong tháng ──────────────────────
+  // dùng gte + lt để đúng mọi tháng (tránh hardcode -31)
   sbGet('hop_dong',
     'select=id'
-    +'&tai_xe=eq.'+txEnc
-    +'&ngay_th=gte.'+yyyymm+'-01'
-    +'&ngay_th=lte.'+yyyymm+'-31'
+    +'&tai_xe=eq.'   + txEnc
+    +'&ngay_th=gte.' + dateFrom
+    +'&ngay_th=lt.'  + dateTo
   ).then(function(rows){
     document.getElementById('stat-chuyen').textContent = rows ? rows.length : '0';
   }).catch(function(e){
-    console.warn('[NK] loadMonthStats hop_dong:', e);
+    console.warn('[NK] stat-chuyen lỗi:', e.message);
   });
 
-  // ── 2b. CHI PHÍ: tổng khoản chi gắn với tài xế trong tháng (bảng thu_chi) ──
+  // ── 2. CHI PHÍ: tổng khoản chi gắn tài xế trong tháng ───────────────────
   sbGet('thu_chi',
     'select=so_tien'
-    +'&tai_xe=eq.'+txEnc
+    +'&tai_xe=eq.'   + txEnc
     +'&loai_gd=eq.chi'
-    +'&ngay_gd=gte.'+yyyymm+'-01'
-    +'&ngay_gd=lte.'+yyyymm+'-31'
+    +'&ngay_gd=gte.' + dateFrom
+    +'&ngay_gd=lt.'  + dateTo
   ).then(function(rows){
-    if(!rows) rows = [];
-    var total = rows.reduce(function(s, r){ return s + (Number(r.so_tien) || 0); }, 0);
-    document.getElementById('stat-rev').textContent = total > 0 ? fmtDriver(total) : '0đ';
+    var total = (rows||[]).reduce(function(s,r){ return s + (Number(r.so_tien)||0); }, 0);
+    document.getElementById('stat-rev').textContent = fmtDriver(total);
   }).catch(function(e){
-    console.warn('[NK] loadMonthStats thu_chi:', e);
+    console.warn('[NK] stat-chiphi lỗi:', e.message);
+    // Nếu bảng chưa có RLS policy cho anon → hiện 0đ thay vì "—"
+    document.getElementById('stat-rev').textContent = '0đ';
   });
 
-  // ── 2. TỔNG KM: max(km_cuoi) − min(km_dau) trong tháng ──
-  // Tính khoảng thời gian [đầu tháng, đầu tháng sau)
-  var parts  = yyyymm.split('-');
-  var y      = parseInt(parts[0], 10);
-  var mo     = parseInt(parts[1], 10);
-  var nextY  = mo === 12 ? y + 1 : y;
-  var nextMo = mo === 12 ? 1 : mo + 1;
-  var pad    = function(n){ return String(n).padStart(2,'0'); };
-  var mFrom  = encodeURIComponent(yyyymm+'-01T00:00:00');
-  var mTo    = encodeURIComponent(nextY+'-'+pad(nextMo)+'-01T00:00:00');
-
+  // ── 3. TỔNG KM: max(km_cuoi) − min(km_dau) qua bao_cao ──────────────────
   Promise.all([
     sbGet('bao_cao',
       'select=so_km'
-      +'&tai_xe_ten=eq.'+txEnc
+      +'&tai_xe_ten=eq.'  + txEnc
       +'&loai=eq.km_dau'
       +'&so_km=not.is.null'
-      +'&created_at=gte.'+mFrom
-      +'&created_at=lt.'+mTo
+      +'&created_at=gte.' + dtFrom
+      +'&created_at=lt.'  + dtTo
       +'&order=so_km.asc&limit=1'
     ),
     sbGet('bao_cao',
       'select=so_km'
-      +'&tai_xe_ten=eq.'+txEnc
+      +'&tai_xe_ten=eq.'  + txEnc
       +'&loai=eq.km_cuoi'
       +'&so_km=not.is.null'
-      +'&created_at=gte.'+mFrom
-      +'&created_at=lt.'+mTo
+      +'&created_at=gte.' + dtFrom
+      +'&created_at=lt.'  + dtTo
       +'&order=so_km.desc&limit=1'
     )
   ]).then(function(res){
