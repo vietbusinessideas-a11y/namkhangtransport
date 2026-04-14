@@ -164,7 +164,23 @@ function calcDuration(ngay_di,ngay_ve){
 function mapTC(r){return{id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',gio:r.gio_gd||'00:00',sotien:Number(r.so_tien)||0,hd:r.hd_so||'',httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',kh:r.doi_tac||'',mota:r.mo_ta||''};}
 function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',tt:r.trang_thai||'san_sang'};}
 function mapTX(r){return{id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',ngaySinh:r.ngay_sinh||'',sdt:r.so_dt||'',luong:Number(r.luong_cb)||0,chuyen:0,doanhThu:0};}
-function mapKH(r){return{id:r.id,ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',diaChi:r.dia_chi||'',hdCount:0,doanhSo:0};}
+function mapKH(r){return{id:r.id,maKH:r.ma_kh||'',ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',diaChi:r.dia_chi||'',hdCount:0,doanhSo:0};}
+// Sinh mã KH tiếp theo: KH-001, KH-002, ...
+function genMaKH(){
+  var max=0;
+  DB.khachHang.forEach(function(k){
+    var m=(k.maKH||'').match(/^KH-(\d+)$/);
+    if(m){var n=parseInt(m[1],10);if(n>max)max=n;}
+  });
+  return 'KH-'+String(max+1).padStart(3,'0');
+}
+// Khi gõ mã KH trong form HĐ → tự điền tên
+function fillKHFromCode(val){
+  var code=(val||'').trim().toUpperCase();
+  var kh=DB.khachHang.find(function(k){return (k.maKH||'').toUpperCase()===code;});
+  var fKh=document.getElementById('f-kh');
+  if(kh&&fKh) fKh.value=kh.ten;
+}
 
 function loadDB(){
   DB={hopDong:DEFAULT_HD.slice(),thuChi:DEFAULT_TC.slice(),xe:DEFAULT_XE.slice(),taiXe:DEFAULT_TX.slice(),khachHang:DEFAULT_KH.slice()};
@@ -462,7 +478,9 @@ function openHDModal(id) {
   var xeOpts = [''].concat(DB.xe.map(function(x){return x.bien;}));
   var xeSel = xeOpts.map(function(v){return'<option'+(v===h.xe?' selected':'')+'>'+(v||'-- Chọn xe --')+'</option>';}).join('');
   var txSel = [''].concat(DB.taiXe.map(function(t){return t.ten;})).map(function(v){return'<option'+(v===h.taixe?' selected':'')+'>'+(v||'-- Chọn --')+'</option>';}).join('');
-  var khList = DB.khachHang.map(function(k){return'<option value="'+k.ten+'">';}).join('');
+  var khList     = DB.khachHang.map(function(k){return'<option value="'+k.ten+'">';}).join('');
+  // Datalist mã KH: value = mã, text hiển thị = "KH-001 – Tên KH"
+  var khCodeList = DB.khachHang.filter(function(k){return k.maKH;}).map(function(k){return'<option value="'+k.maKH+'">'+k.maKH+' – '+k.ten+'</option>';}).join('');
   // Gợi ý điểm đi / điểm đến từ các HĐ đã có
   var seen={di:{},den:{}};
   DB.hopDong.forEach(function(hd){
@@ -476,12 +494,18 @@ function openHDModal(id) {
   var today = new Date().toISOString().slice(0,10);
   showModal(id?'Sửa HĐ':'Thêm HĐ mới', id?h.so:'',
     '<datalist id="kh-list">'+khList+'</datalist>'+
+    '<datalist id="kh-code-list">'+khCodeList+'</datalist>'+
     '<datalist id="diem-di-list">'+diList+'</datalist>'+
     '<datalist id="diem-den-list">'+denList+'</datalist>'+
     '<div class="form-row"><div class="fg"><label class="fl">Số HĐ</label><input class="fc" id="f-so" value="'+(h.so||genHDSo())+'"></div><div class="fg"><label class="fl">Ngày ký</label><input type="date" class="fc" id="f-ngay" value="'+(h.ngay||today)+'"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Ngày đi <span class="req">*</span></label><input type="date" class="fc" id="f-ngay-di" value="'+(h.ngay_di||today)+'" oninput="updateDurationBadge()"></div><div class="fg"><label class="fl">Ngày về</label><input type="date" class="fc" id="f-ngay-ve" value="'+(h.ngay_ve||'')+'" oninput="updateDurationBadge()"></div></div>'+
     '<div id="duration-badge" style="margin:-6px 0 10px;font-size:.75rem;font-weight:700;color:#2563eb;min-height:18px"></div>'+
-    '<div class="fg"><label class="fl">Khách hàng <span class="req">*</span></label><input class="fc" id="f-kh" value="'+(h.kh||'')+'" placeholder="Gõ để tìm..." list="kh-list" autocomplete="off"></div>'+
+    '<div class="form-row">'+
+      '<div class="fg" style="max-width:140px"><label class="fl">Mã KH</label>'+
+        '<input class="fc" id="f-ma-kh-hd" placeholder="KH-001" list="kh-code-list" autocomplete="off" style="font-family:monospace;font-weight:700;color:var(--blue)" oninput="fillKHFromCode(this.value)" onchange="fillKHFromCode(this.value)">'+
+      '</div>'+
+      '<div class="fg"><label class="fl">Khách hàng <span class="req">*</span></label><input class="fc" id="f-kh" value="'+(h.kh||'')+'" placeholder="Gõ tên hoặc chọn từ mã KH..." list="kh-list" autocomplete="off"></div>'+
+    '</div>'+
     '<div class="form-row">'+
       '<div class="fg"><label class="fl">Điểm đi</label><input class="fc" id="f-diem-di" value="'+pt.di+'" placeholder="TP. Hồ Chí Minh" list="diem-di-list" autocomplete="off"></div>'+
       '<div class="fg"><label class="fl">Điểm đến</label><input class="fc" id="f-diem-den" value="'+pt.den+'" placeholder="Vũng Tàu" list="diem-den-list" autocomplete="off"></div>'+
@@ -492,6 +516,16 @@ function openHDModal(id) {
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveHD(\''+(id||'')+'\')">💾 Lưu</button>');
   // Hiển thị badge thời lượng ngay khi mở modal
   setTimeout(updateDurationBadge, 80);
+  // Nếu đang edit và KH đã có → điền sẵn mã KH
+  if(h.kh){
+    var khObj = DB.khachHang.find(function(k){return k.ten===h.kh;});
+    if(khObj&&khObj.maKH){
+      setTimeout(function(){
+        var el=document.getElementById('f-ma-kh-hd');
+        if(el) el.value=khObj.maKH;
+      },50);
+    }
+  }
 }
 function updateDurationBadge(){
   var el = document.getElementById('duration-badge'); if(!el) return;
@@ -530,18 +564,35 @@ function deleteHD(id) {
 function goKHPage(p) { PAGES.kh = p; renderKH(); }
 function renderKH() {
   var q = document.getElementById('kh-search').value.toLowerCase();
-  var rows = DB.khachHang.filter(function(k){return !q||k.ten.toLowerCase().includes(q)||k.sdt.includes(q);});
+  // Tính hdCount và doanhSo động từ DB.hopDong; tìm kiếm cả theo mã KH
+  var rows = DB.khachHang.filter(function(k){
+    return !q || k.ten.toLowerCase().includes(q) || k.sdt.includes(q) || (k.maKH||'').toLowerCase().includes(q);
+  }).map(function(k){
+    var hds     = DB.hopDong.filter(function(h){ return h.kh === k.ten; });
+    var doanhSo = hds.reduce(function(s,h){ return s + h.giatri; }, 0);
+    return Object.assign({}, k, { hdCount: hds.length, doanhSo: doanhSo });
+  }).sort(function(a,b){ return b.doanhSo - a.doanhSo; });
   document.getElementById('kh-count').textContent = rows.length + ' khách hàng';
   var slice = rows.slice((PAGES.kh-1)*PAGE_SIZE, PAGES.kh*PAGE_SIZE);
   document.getElementById('kh-body').innerHTML = slice.map(function(k){
-    return '<tr><td style="font-weight:600">'+k.ten+'</td><td><span class="badge '+(k.loai==='Doanh nghiệp'?'b-blue':k.loai==='Trường học'?'b-green':'b-gray')+'">'+k.loai+'</span></td><td class="mono">'+k.sdt+'</td><td style="text-align:center;font-weight:600">'+k.hdCount+'</td><td><span class="amt-pos">+'+fmtM(k.doanhSo)+'</span></td><td>'+(isAdmin()?'<div class="row-acts"><button class="ic-btn del" onclick="askDelete(\'Xóa KH?\',\''+k.ten+'\',function(){deleteKH(\''+k.id+'\')})">🗑️</button></div>':'')+'</td></tr>';
+    var maTag = k.maKH ? '<span style="font-family:monospace;font-size:.78rem;font-weight:700;color:var(--blue);background:var(--blue-light);padding:1px 6px;border-radius:4px">'+k.maKH+'</span>' : '<span style="color:var(--muted);font-size:.75rem">—</span>';
+    return '<tr>'+
+      '<td>'+maTag+'</td>'+
+      '<td style="font-weight:600">'+k.ten+'</td>'+
+      '<td><span class="badge '+(k.loai==='Doanh nghiệp'?'b-blue':k.loai==='Trường học'?'b-green':'b-gray')+'">'+k.loai+'</span></td>'+
+      '<td class="mono">'+k.sdt+'</td>'+
+      '<td style="text-align:center;font-weight:600">'+k.hdCount+'</td>'+
+      '<td><span class="amt-pos">+'+fmtM(k.doanhSo)+'</span></td>'+
+      '<td>'+(isAdmin()?'<div class="row-acts"><button class="ic-btn del" onclick="askDelete(\'Xóa KH?\',\''+k.ten+'\',function(){deleteKH(\''+k.id+'\')})">🗑️</button></div>':'')+'</td>'+
+    '</tr>';
   }).join('');
   renderPager('kh-pager', rows.length, PAGES.kh, 'goKHPage');
 }
 function openKHModal() {
   if (!requireAdmin()) return;
+  var maKH = genMaKH();
   showModal('Thêm Khách hàng','',
-    '<div class="fg"><label class="fl">Tên <span class="req">*</span></label><input class="fc" id="f-ten" placeholder="Tên cá nhân / công ty"></div>'+
+    '<div class="form-row"><div class="fg" style="max-width:140px"><label class="fl">Mã KH</label><input class="fc" id="f-ma-kh" value="'+maKH+'" readonly style="background:var(--bg2);color:var(--blue);font-weight:700;font-family:monospace;cursor:default"></div><div class="fg"><label class="fl">Tên <span class="req">*</span></label><input class="fc" id="f-ten" placeholder="Tên cá nhân / công ty"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Loại</label><select class="fc" id="f-loai"><option>Doanh nghiệp</option><option>Trường học</option><option>Cá nhân</option></select></div><div class="fg"><label class="fl">SĐT</label><input class="fc" id="f-sdt" placeholder="0xxx..."></div></div>'+
     '<div class="fg"><label class="fl">Địa chỉ</label><input class="fc" id="f-diachi" placeholder="Địa chỉ..."></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveKH()">💾 Lưu</button>');
@@ -550,10 +601,11 @@ function saveKH() {
   if (!requireAdmin()) return;
   var ten = document.getElementById('f-ten').value.trim();
   if (!ten) { toast('Nhập tên!','error'); return; }
-  var row = {ten:ten,loai:document.getElementById('f-loai').value,so_dt:document.getElementById('f-sdt').value,dia_chi:document.getElementById('f-diachi').value};
+  var maKH = (document.getElementById('f-ma-kh')||{}).value || genMaKH();
+  var row = {ma_kh:maKH,ten:ten,loai:document.getElementById('f-loai').value,so_dt:document.getElementById('f-sdt').value,dia_chi:document.getElementById('f-diachi').value};
   sbPost('khach_hang',row).then(function(res){
-    var obj = {id:(res&&res[0]&&res[0].id)||uid(),ten:ten,loai:row.loai,sdt:row.so_dt,diaChi:row.dia_chi,hdCount:0,doanhSo:0};
-    DB.khachHang.unshift(obj); closeModal(); renderKH(); toast('✅ Đã thêm KH','success');
+    var obj = {id:(res&&res[0]&&res[0].id)||uid(),maKH:maKH,ten:ten,loai:row.loai,sdt:row.so_dt,diaChi:row.dia_chi,hdCount:0,doanhSo:0};
+    DB.khachHang.push(obj); closeModal(); renderKH(); toast('✅ Đã thêm KH '+maKH,'success');
   }).catch(function(e){toast('❌ '+e.message,'error');});
 }
 function deleteKH(id) {
