@@ -106,6 +106,12 @@ function readMoney(id){
 function fmtD(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function getMY(d){if(!d)return'';var p=d.split('-');return p[1]+'/'+p[0];}
 function uid(){return'id'+Date.now()+Math.random().toString(36).slice(2,5);}
+// Tách "HCM → Vũng Tàu" thành {di:'HCM', den:'Vũng Tàu'}
+function parseTuyen(tuyen){
+  if(!tuyen) return {di:'',den:''};
+  var parts = tuyen.split(/\s*→\s*|\s*->\s*/);
+  return {di:(parts[0]||'').trim(), den:(parts[1]||'').trim()};
+}
 function genHDSo(){
   var n=new Date();
   var yy=String(n.getFullYear()).slice(-2);
@@ -415,14 +421,29 @@ function openHDModal(id) {
   var xeSel = xeOpts.map(function(v){return'<option'+(v===h.xe?' selected':'')+'>'+(v||'-- Chọn xe --')+'</option>';}).join('');
   var txSel = [''].concat(DB.taiXe.map(function(t){return t.ten;})).map(function(v){return'<option'+(v===h.taixe?' selected':'')+'>'+(v||'-- Chọn --')+'</option>';}).join('');
   var khList = DB.khachHang.map(function(k){return'<option value="'+k.ten+'">';}).join('');
+  // Gợi ý điểm đi / điểm đến từ các HĐ đã có
+  var seen={di:{},den:{}};
+  DB.hopDong.forEach(function(hd){
+    var p=parseTuyen(hd.tuyen);
+    if(p.di)  seen.di[p.di]=1;
+    if(p.den) seen.den[p.den]=1;
+  });
+  var diList  = Object.keys(seen.di).map(function(v){return'<option value="'+v+'">';}).join('');
+  var denList = Object.keys(seen.den).map(function(v){return'<option value="'+v+'">';}).join('');
+  var pt = parseTuyen(h.tuyen);   // parse tuyến cũ khi edit
   var today = new Date().toISOString().slice(0,10);
   showModal(id?'Sửa HĐ':'Thêm HĐ mới', id?h.so:'',
     '<datalist id="kh-list">'+khList+'</datalist>'+
+    '<datalist id="diem-di-list">'+diList+'</datalist>'+
+    '<datalist id="diem-den-list">'+denList+'</datalist>'+
     '<div class="form-row"><div class="fg"><label class="fl">Số HĐ</label><input class="fc" id="f-so" value="'+(h.so||genHDSo())+'"></div><div class="fg"><label class="fl">Ngày ký</label><input type="date" class="fc" id="f-ngay" value="'+(h.ngay||today)+'"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Ngày đi <span class="req">*</span></label><input type="date" class="fc" id="f-ngay-di" value="'+(h.ngay_di||today)+'" oninput="updateDurationBadge()"></div><div class="fg"><label class="fl">Ngày về</label><input type="date" class="fc" id="f-ngay-ve" value="'+(h.ngay_ve||'')+'" oninput="updateDurationBadge()"></div></div>'+
     '<div id="duration-badge" style="margin:-6px 0 10px;font-size:.75rem;font-weight:700;color:#2563eb;min-height:18px"></div>'+
     '<div class="fg"><label class="fl">Khách hàng <span class="req">*</span></label><input class="fc" id="f-kh" value="'+(h.kh||'')+'" placeholder="Gõ để tìm..." list="kh-list" autocomplete="off"></div>'+
-    '<div class="fg"><label class="fl">Tuyến đường</label><input class="fc" id="f-tuyen" value="'+(h.tuyen||'')+'" placeholder="HCM → ..."></div>'+
+    '<div class="form-row">'+
+      '<div class="fg"><label class="fl">Điểm đi</label><input class="fc" id="f-diem-di" value="'+pt.di+'" placeholder="TP. Hồ Chí Minh" list="diem-di-list" autocomplete="off"></div>'+
+      '<div class="fg"><label class="fl">Điểm đến</label><input class="fc" id="f-diem-den" value="'+pt.den+'" placeholder="Vũng Tàu" list="diem-den-list" autocomplete="off"></div>'+
+    '</div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Xe</label><select class="fc" id="f-xe">'+xeSel+'</select></div><div class="fg"><label class="fl">Tài xế</label><select class="fc" id="f-taixe">'+txSel+'</select></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Giá trị (VNĐ) <span class="req">*</span></label><input type="text" inputmode="numeric" class="fc" id="f-giatri" value="'+(h.giatri?fmt(h.giatri):'')+'" placeholder="0" oninput="fmtInput(this)"></div><div class="fg"><label class="fl">Đã thu</label><input type="text" inputmode="numeric" class="fc" id="f-dathu" value="'+(h.dathu?fmt(h.dathu):'0')+'" placeholder="0" oninput="fmtInput(this)"></div></div>'+
     '<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="f-tt"><option value="cho_xe"'+(h.tt==='cho_xe'?' selected':'')+'>Chờ thực hiện</option><option value="dang_chay"'+(h.tt==='dang_chay'?' selected':'')+'>Đang thực hiện</option><option value="hoan_thanh"'+(h.tt==='hoan_thanh'?' selected':'')+'>Hoàn thành</option><option value="cho_thanh_toan"'+(h.tt==='cho_thanh_toan'?' selected':'')+'>Chờ thanh toán</option></select></div>',
@@ -441,9 +462,14 @@ function saveHD(id) {
   if (!requireAdmin()) return;
   var giatri = readMoney('f-giatri'), kh = document.getElementById('f-kh').value.trim();
   if (!kh || !giatri) { toast('Vui lòng nhập đủ thông tin!','error'); return; }
-  var ngay_di = (document.getElementById('f-ngay-di')||{}).value||'';
-  var ngay_ve = (document.getElementById('f-ngay-ve')||{}).value||'';
-  var obj = {id:id||uid(),so:document.getElementById('f-so').value,kh:kh,tuyen:document.getElementById('f-tuyen').value,ngay:document.getElementById('f-ngay').value||'',ngay_di:ngay_di,ngay_ve:ngay_ve,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,giatri:giatri,dathu:readMoney('f-dathu'),tt:document.getElementById('f-tt').value};
+  var ngay_di  = (document.getElementById('f-ngay-di')||{}).value||'';
+  var ngay_ve  = (document.getElementById('f-ngay-ve')||{}).value||'';
+  var diemDi   = (document.getElementById('f-diem-di') ||{}).value||'';
+  var diemDen  = (document.getElementById('f-diem-den')||{}).value||'';
+  // Ghép thành "Điểm đi → Điểm đến"; nếu chỉ có một vế thì dùng vế đó
+  var tuyen = diemDi && diemDen ? diemDi.trim()+' → '+diemDen.trim()
+            : (diemDi||diemDen).trim();
+  var obj = {id:id||uid(),so:document.getElementById('f-so').value,kh:kh,tuyen:tuyen,ngay:document.getElementById('f-ngay').value||'',ngay_di:ngay_di,ngay_ve:ngay_ve,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,giatri:giatri,dathu:readMoney('f-dathu'),tt:document.getElementById('f-tt').value};
   var row = {so_hd:obj.so,khach_hang:obj.kh,tuyen_duong:obj.tuyen,ngay_th:obj.ngay||null,ngay_di:obj.ngay_di||null,ngay_ve:obj.ngay_ve||null,bien_so_xe:obj.xe,tai_xe:obj.taixe,gia_tri:obj.giatri,da_thu:obj.dathu,trang_thai:obj.tt};
   (id ? sbPatch('hop_dong',id,row) : sbPost('hop_dong',row)).then(function(res) {
     if (id) DB.hopDong = DB.hopDong.map(function(x){return x.id===id?obj:x;});
