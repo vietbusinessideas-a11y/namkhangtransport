@@ -174,12 +174,56 @@ function genMaKH(){
   });
   return 'KH-'+String(max+1).padStart(3,'0');
 }
-// Khi gõ mã KH trong form HĐ → tự điền tên
+// Khi gõ/chọn mã KH trong form HĐ → tự điền tên + xóa cảnh báo
 function fillKHFromCode(val){
   var code=(val||'').trim().toUpperCase();
   var kh=DB.khachHang.find(function(k){return (k.maKH||'').toUpperCase()===code;});
   var fKh=document.getElementById('f-kh');
-  if(kh&&fKh) fKh.value=kh.ten;
+  if(!fKh) return;
+  if(kh){
+    fKh.value=kh.ten;
+    fKh.style.borderColor='';
+    var hint=document.getElementById('kh-sync-hint'); if(hint) hint.textContent='';
+  } else if(code){
+    // Mã gõ nhưng chưa khớp → không xóa tên cũ, chỉ cảnh báo nhẹ
+    var hint=document.getElementById('kh-sync-hint');
+    if(hint) hint.textContent='';
+  }
+}
+// Khi gõ/chọn tên KH trong form HĐ → tự điền mã + kiểm tra đồng bộ
+function fillCodeFromKH(val){
+  var name=(val||'').trim();
+  var kh=DB.khachHang.find(function(k){return k.ten===name;});
+  var elCode=document.getElementById('f-ma-kh-hd');
+  var hint=document.getElementById('kh-sync-hint');
+  if(!elCode) return;
+  if(kh){
+    elCode.value=kh.maKH||'';
+    elCode.style.borderColor='';
+    if(hint) hint.textContent='';
+  } else if(name){
+    // Tên chưa có trong DB → xóa mã, hiện gợi ý
+    elCode.value='';
+    if(hint) hint.textContent='⚠️ Khách hàng chưa có trong danh sách, hãy thêm mới trước.';
+  } else {
+    elCode.value='';
+    if(hint) hint.textContent='';
+  }
+}
+// Kiểm tra mã và tên có khớp không — gọi trước khi lưu
+function validateKHSync(){
+  var code=(document.getElementById('f-ma-kh-hd')||{}).value||'';
+  var name=((document.getElementById('f-kh')||{}).value||'').trim();
+  if(!code || !name) return true; // một trong hai trống → ok, validate bắt buộc ở saveHD
+  var kh=DB.khachHang.find(function(k){return (k.maKH||'').toUpperCase()===code.trim().toUpperCase();});
+  if(kh && kh.ten!==name){
+    var hint=document.getElementById('kh-sync-hint');
+    if(hint) hint.textContent='⚠️ Mã '+code+' thuộc "'+kh.ten+'", không khớp tên đã nhập. Vui lòng kiểm tra lại.';
+    (document.getElementById('f-ma-kh-hd')||{style:{}}).style.borderColor='#ef4444';
+    (document.getElementById('f-kh')||{style:{}}).style.borderColor='#ef4444';
+    return false;
+  }
+  return true;
 }
 
 function loadDB(){
@@ -502,10 +546,11 @@ function openHDModal(id) {
     '<div id="duration-badge" style="margin:-6px 0 10px;font-size:.75rem;font-weight:700;color:#2563eb;min-height:18px"></div>'+
     '<div class="form-row">'+
       '<div class="fg" style="max-width:140px"><label class="fl">Mã KH</label>'+
-        '<input class="fc" id="f-ma-kh-hd" placeholder="KH-001" list="kh-code-list" autocomplete="off" style="font-family:monospace;font-weight:700;color:var(--blue)" oninput="fillKHFromCode(this.value)" onchange="fillKHFromCode(this.value)">'+
+        '<input class="fc" id="f-ma-kh-hd" placeholder="KH-..." list="kh-code-list" autocomplete="off" style="font-family:monospace;font-weight:700;color:var(--blue)" oninput="fillKHFromCode(this.value)" onchange="fillKHFromCode(this.value)">'+
       '</div>'+
-      '<div class="fg"><label class="fl">Khách hàng <span class="req">*</span></label><input class="fc" id="f-kh" value="'+(h.kh||'')+'" placeholder="Gõ tên hoặc chọn từ mã KH..." list="kh-list" autocomplete="off"></div>'+
+      '<div class="fg"><label class="fl">Khách hàng <span class="req">*</span></label><input class="fc" id="f-kh" value="'+(h.kh||'')+'" placeholder="Gõ tên hoặc chọn từ mã KH..." list="kh-list" autocomplete="off" oninput="fillCodeFromKH(this.value)" onchange="fillCodeFromKH(this.value)"></div>'+
     '</div>'+
+    '<div id="kh-sync-hint" style="margin:-8px 0 8px;font-size:.75rem;color:#ef4444;min-height:16px"></div>'+
     '<div class="form-row">'+
       '<div class="fg"><label class="fl">Điểm đi</label><input class="fc" id="f-diem-di" value="'+pt.di+'" placeholder="TP. Hồ Chí Minh" list="diem-di-list" autocomplete="off"></div>'+
       '<div class="fg"><label class="fl">Điểm đến</label><input class="fc" id="f-diem-den" value="'+pt.den+'" placeholder="Vũng Tàu" list="diem-den-list" autocomplete="off"></div>'+
@@ -538,6 +583,8 @@ function saveHD(id) {
   if (!requireAdmin()) return;
   var giatri = readMoney('f-giatri'), kh = document.getElementById('f-kh').value.trim();
   if (!kh || !giatri) { toast('Vui lòng nhập đủ thông tin!','error'); return; }
+  // Kiểm tra mã KH và tên KH phải khớp nhau
+  if (!validateKHSync()) { toast('⚠️ Mã KH và tên khách hàng không khớp!','error'); return; }
   var ngay_di  = (document.getElementById('f-ngay-di')||{}).value||'';
   var ngay_ve  = (document.getElementById('f-ngay-ve')||{}).value||'';
   var diemDi   = (document.getElementById('f-diem-di') ||{}).value||'';
