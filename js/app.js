@@ -777,18 +777,51 @@ function saveKHEdit(id) {
   var ten = (document.getElementById('ef-ten')||{}).value;
   if(!ten||!ten.trim()){toast('Nhập tên KH!','error');return;}
   ten = ten.trim();
+
+  // Lưu lại tên cũ trước khi sửa để đồng bộ hop_dong
+  var khObj = DB.khachHang.find(function(x){return x.id===id;});
+  var tenCu = khObj ? khObj.ten : '';
+  var tenDoi = tenCu && tenCu !== ten; // true nếu tên thực sự thay đổi
+
   var row = {
-    ten:  ten,
-    loai: document.getElementById('ef-loai').value,
-    so_dt:document.getElementById('ef-sdt').value,
-    dia_chi:document.getElementById('ef-diachi').value
+    ten:     ten,
+    loai:    document.getElementById('ef-loai').value,
+    so_dt:   document.getElementById('ef-sdt').value,
+    dia_chi: document.getElementById('ef-diachi').value
   };
-  sbPatch('khach_hang',id,row).then(function(){
+
+  // Bước 1: Cập nhật khach_hang
+  sbPatch('khach_hang', id, row)
+  .then(function(){
+    // Bước 2: Nếu tên thay đổi → cập nhật khach_hang trên toàn bộ hop_dong
+    if(!tenDoi) return Promise.resolve();
+    return fetch(
+      SB_URL+'/rest/v1/hop_dong?khach_hang=eq.'+encodeURIComponent(tenCu),
+      {method:'PATCH', headers:SB_H, body:JSON.stringify({khach_hang:ten})}
+    ).then(function(r){
+      if(!r.ok) return r.text().then(function(e){throw new Error(r.status+': '+e);});
+    });
+  })
+  .then(function(){
+    // Bước 3: Cập nhật local cache
     DB.khachHang = DB.khachHang.map(function(x){
       return x.id===id ? Object.assign({},x,{ten:ten,loai:row.loai,sdt:row.so_dt,diaChi:row.dia_chi}) : x;
     });
-    closeModal(); renderKH(); toast('✅ Đã cập nhật '+ten,'success');
-  }).catch(function(e){toast('❌ '+e.message,'error');});
+    if(tenDoi){
+      // Đồng bộ DB.hopDong: thay tên cũ → tên mới
+      DB.hopDong = DB.hopDong.map(function(h){
+        return h.kh===tenCu ? Object.assign({},h,{kh:ten}) : h;
+      });
+      // Đồng bộ DB.thuChi (trường đối tác)
+      DB.thuChi = DB.thuChi.map(function(tc){
+        return tc.kh===tenCu ? Object.assign({},tc,{kh:ten}) : tc;
+      });
+    }
+    closeModal();
+    renderKH();
+    toast('✅ Đã cập nhật'+( tenDoi?' (đã đồng bộ '+DB.hopDong.filter(function(h){return h.kh===ten;}).length+' HĐ)':'' ),'success');
+  })
+  .catch(function(e){toast('❌ '+e.message,'error');});
 }
 
 // ═══════════════════════════════════════
