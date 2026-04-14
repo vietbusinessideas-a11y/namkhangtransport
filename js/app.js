@@ -405,7 +405,7 @@ function renderDashboard(){
     var txRank=DB.taiXe.map(function(tx){var hds=DB.hopDong.filter(function(h){return h.taixe===tx.ten&&getMY(h.ngay)===ym;});return{id:tx.id,ten:tx.ten,chuyen:hds.length,rev:hds.reduce(function(s,h){return s+h.giatri;},0)};}).sort(function(a,b){return b.rev-a.rev;});
     if(!txRank.length||txRank[0].rev===0){driverEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--text3);font-size:.82rem">Chưa có dữ liệu tháng '+mm+'/'+yyyy+'</div>';}
     else{var maxRev=txRank[0].rev||1;var rIco=['🥇','🥈','🥉'];
-      driverEl.innerHTML=txRank.slice(0,5).map(function(tx,i){return'<div class="rank-item" style="cursor:pointer" onclick="navTo(\'xe\')"><div class="rank-num '+(i<3?'r'+(i+1):'rn')+'">'+(rIco[i]||i+1)+'</div><div class="rank-info"><div class="rank-name">'+tx.ten+'</div><div class="rank-meta">'+tx.chuyen+' chuyến</div></div><div style="flex:1;padding:0 16px"><div class="mini-bar-wrap"><div class="mini-bar"><div class="mini-fill" style="width:'+Math.round(tx.rev/maxRev*100)+'%;background:var(--green)"></div></div><div class="mini-pct">'+Math.round(tx.rev/maxRev*100)+'%</div></div></div><div class="rank-amount">'+fmtM(tx.rev)+'</div></div>';}).join('');}
+      driverEl.innerHTML=txRank.slice(0,5).map(function(tx,i){return'<div class="rank-item" style="cursor:pointer" title="Xem chi tiết '+tx.ten+'" onclick="openTXDetail(\''+encodeURIComponent(tx.ten)+'\',\''+ym+'\')"><div class="rank-num '+(i<3?'r'+(i+1):'rn')+'">'+(rIco[i]||i+1)+'</div><div class="rank-info"><div class="rank-name">'+tx.ten+'</div><div class="rank-meta">'+tx.chuyen+' chuyến</div></div><div style="flex:1;padding:0 16px"><div class="mini-bar-wrap"><div class="mini-bar"><div class="mini-fill" style="width:'+Math.round(tx.rev/maxRev*100)+'%;background:var(--green)"></div></div><div class="mini-pct">'+Math.round(tx.rev/maxRev*100)+'%</div></div></div><div class="rank-amount">'+fmtM(tx.rev)+'</div></div>';}).join('');}
   }
 }
 
@@ -890,7 +890,7 @@ function renderTaiXe(){
     var hdList=DB.hopDong.filter(function(h){return h.taixe===t.ten;});
     var hdMonth=hdList.filter(function(h){return getMY(h.ngay)===DB_MONTH;});
     var revMonth=hdMonth.reduce(function(s,h){return s+h.giatri;},0);
-    return'<tr onclick="openTXDetail(\''+t.id+'\')" style="cursor:pointer"><td><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:700">'+t.ten.split(' ').pop()[0]+'</div><div><div style="font-weight:600">'+t.ten+'</div><div style="font-size:.68rem;color:var(--text3)">'+t.sdt+'</div></div></div></td><td class="mono">'+t.cmnd+'</td><td><span class="badge b-blue">'+t.bangLai+'</span></td><td style="text-align:center;font-weight:600">'+hdMonth.length+'<div style="font-size:.65rem;color:var(--text3);font-weight:400">T'+parseInt(DB_MONTH.slice(0,2))+'</div></td><td><span class="amt-pos">+'+fmtM(revMonth)+'</span></td><td>'+fmtM(t.luong)+'</td><td><div class="row-acts"><button class="ic-btn" onclick="event.stopPropagation();openTXDetail(\''+t.id+'\')">🔍</button>'+(isAdmin()?'<button class="ic-btn" onclick="event.stopPropagation();openTXModal(\''+t.id+'\')">✏️</button><button class="ic-btn del" onclick="event.stopPropagation();askDelete(\'Xóa tài xế '+t.ten+'?\',\'\',function(){deleteTX(\''+t.id+'\')})">🗑️</button>':'')+'</div></td></tr>';
+    return'<tr onclick="openTXDetailById(\''+t.id+'\')" style="cursor:pointer"><td><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:700">'+t.ten.split(' ').pop()[0]+'</div><div><div style="font-weight:600">'+t.ten+'</div><div style="font-size:.68rem;color:var(--text3)">'+t.sdt+'</div></div></div></td><td class="mono">'+t.cmnd+'</td><td><span class="badge b-blue">'+t.bangLai+'</span></td><td style="text-align:center;font-weight:600">'+hdMonth.length+'<div style="font-size:.65rem;color:var(--text3);font-weight:400">T'+parseInt(DB_MONTH.slice(0,2))+'</div></td><td><span class="amt-pos">+'+fmtM(revMonth)+'</span></td><td>'+fmtM(t.luong)+'</td><td><div class="row-acts"><button class="ic-btn" onclick="event.stopPropagation();openTXDetailById(\''+t.id+'\')">🔍</button>'+(isAdmin()?'<button class="ic-btn" onclick="event.stopPropagation();openTXModal(\''+t.id+'\')">✏️</button><button class="ic-btn del" onclick="event.stopPropagation();askDelete(\'Xóa tài xế '+t.ten+'?\',\'\',function(){deleteTX(\''+t.id+'\')})">🗑️</button>':'')+'</div></td></tr>';
   }).join('');}
 function openTXModal(id){
   if(!requireAdmin())return;
@@ -914,6 +914,76 @@ function saveTX(id){
   }).catch(function(e){toast('❌ '+e.message,'error');});
 }
 function deleteTX(id){if(!requireAdmin())return;sbDel('tai_xe',id).then(function(){DB.taiXe=DB.taiXe.filter(function(x){return x.id!==id;});renderTaiXe();toast('🗑️ Đã xóa tài xế','info');}).catch(function(e){toast('❌ '+e.message,'error');});}
+
+// ─── Chi tiết tài xế (dùng từ Dashboard & Báo cáo) ──────────────────────────
+// ten: tên tài xế (plain string); filterYM: "MM/YYYY" nếu muốn lọc theo tháng, null = tất cả
+function openTXDetail(tenEncoded, filterYM){
+  var ten=decodeURIComponent(tenEncoded);
+  var txInfo=DB.taiXe.find(function(x){return x.ten===ten;})||{ten:ten};
+  var allHDs=DB.hopDong.filter(function(h){return h.taixe===ten;});
+  var hds=filterYM?allHDs.filter(function(h){return getMY(h.ngay||h.ngay_di||'')===filterYM;}):allHDs;
+  hds=hds.slice().sort(function(a,b){return(b.ngay||'').localeCompare(a.ngay||'');});
+  var doanhThu=hds.reduce(function(s,h){return s+h.giatri;},0);
+  var daThu=hds.reduce(function(s,h){return s+h.dathu;},0);
+  var conNo=doanhThu-daThu;
+  var ttMap={cho_xe:'Chờ TH',dang_chay:'Đang chạy',hoan_thanh:'Hoàn thành'};
+  var ttCls={cho_xe:'b-gray',dang_chay:'b-blue',hoan_thanh:'b-green'};
+  var scopeLbl=filterYM?'Tháng '+filterYM:'Toàn bộ';
+  var hdRows=hds.length
+    ?hds.map(function(h){
+        return'<tr>'+
+          '<td style="font-family:monospace;font-size:.78rem">'+h.so+'</td>'+
+          '<td style="font-size:.8rem">'+fmtD(h.ngay)+'</td>'+
+          '<td style="font-size:.8rem;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(h.kh||'—')+'</td>'+
+          '<td style="font-size:.8rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(h.tuyen||'—')+'</td>'+
+          '<td style="font-size:.78rem;color:var(--text2)">'+(h.xe||'—')+'</td>'+
+          '<td style="text-align:right;font-size:.82rem;font-weight:600">'+fmtM(h.giatri)+'</td>'+
+          '<td style="text-align:right;font-size:.82rem;color:'+(h.dathu>=h.giatri?'var(--green)':'var(--orange)')+'">'+fmtM(h.dathu)+'</td>'+
+          '<td><span class="badge '+(ttCls[h.tt]||'b-gray')+'" style="font-size:.68rem">'+(ttMap[h.tt]||h.tt)+'</span></td>'+
+        '</tr>';
+      }).join('')
+    :'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Không có hợp đồng'+(filterYM?' trong '+filterYM:'')+'</td></tr>';
+  showModal(
+    '🧑‍✈️ '+ten,
+    scopeLbl+' · '+(txInfo.sdt||txInfo.phone?'📞 '+(txInfo.sdt||txInfo.phone||''):'Tài xế'),
+    // ── Header thống kê ──
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1.4rem;font-weight:700;color:var(--blue)">'+hds.length+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Số chuyến</div>'+
+      '</div>'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1rem;font-weight:700;color:var(--text1)">'+fmtM(doanhThu)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Tổng doanh thu</div>'+
+      '</div>'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1rem;font-weight:700;color:var(--green)">'+fmtM(daThu)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Đã thu</div>'+
+      '</div>'+
+      '<div style="background:'+(conNo>0?'#fef2f2':'var(--bg2)')+';border-radius:8px;padding:10px;text-align:center;border:'+(conNo>0?'1px solid #fecaca':'1px solid transparent')+'">'+
+        '<div style="font-size:1rem;font-weight:700;color:'+(conNo>0?'var(--red)':'var(--text3)')+'">'+fmtM(conNo)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">'+(conNo>0?'⚠️ Còn nợ':'Không nợ')+'</div>'+
+      '</div>'+
+    '</div>'+
+    // ── Thông tin bổ sung ──
+    (txInfo.bangLai||txInfo.xe?
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:var(--text2)">'+
+        (txInfo.bangLai?'<div>📄 Bằng lái: <span style="color:var(--text1);font-weight:600">'+txInfo.bangLai+'</span></div>':'')+
+        (txInfo.xe?'<div>🚌 Xe phụ trách: <span style="color:var(--text1);font-weight:600">'+txInfo.xe+'</span></div>':'')+
+        (allHDs.length!==hds.length?'<div style="color:var(--text3)">Tổng tất cả: <b>'+allHDs.length+'</b> chuyến</div>':'')+
+      '</div>':'') +
+    // ── Bảng HĐ ──
+    '<div style="font-weight:600;font-size:.83rem;margin-bottom:6px;color:var(--text2)">📋 Hợp đồng'+
+      (filterYM?' tháng '+filterYM:'')+' ('+hds.length+')</div>'+
+    '<div class="table-wrap" style="max-height:260px;overflow-y:auto;border-radius:6px;border:1px solid var(--border)">'+
+      '<table class="dt" style="min-width:560px;font-size:.82rem">'+
+        '<thead><tr><th>Số HĐ</th><th>Ngày</th><th>Khách hàng</th><th>Tuyến</th><th>Xe</th><th style="text-align:right">Giá trị</th><th style="text-align:right">Đã thu</th><th>Trạng thái</th></tr></thead>'+
+        '<tbody>'+hdRows+'</tbody>'+
+      '</table>'+
+    '</div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'
+  );
+}
 
 // ═══════════════════════════════════════
 // THU CHI
@@ -1552,7 +1622,7 @@ function exportXeReport(id){
   },100);
 }
 
-function openTXDetail(id){
+function openTXDetailById(id){
   var tx=DB.taiXe.find(function(v){return v.id===id;}); if(!tx)return;
   var hdList=DB.hopDong.filter(function(h){return h.taixe===tx.ten;}).sort(function(a,b){return b.ngay.localeCompare(a.ngay);});
   var totalRev=hdList.reduce(function(s,h){return s+h.giatri;},0);
