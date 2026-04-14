@@ -611,7 +611,6 @@ function deleteHD(id) {
 function goKHPage(p) { PAGES.kh = p; renderKH(); }
 function renderKH() {
   var q = document.getElementById('kh-search').value.toLowerCase();
-  // Tính hdCount và doanhSo động từ DB.hopDong; tìm kiếm cả theo mã KH
   var rows = DB.khachHang.filter(function(k){
     return !q || k.ten.toLowerCase().includes(q) || k.sdt.includes(q) || (k.maKH||'').toLowerCase().includes(q);
   }).map(function(k){
@@ -623,14 +622,20 @@ function renderKH() {
   var slice = rows.slice((PAGES.kh-1)*PAGE_SIZE, PAGES.kh*PAGE_SIZE);
   document.getElementById('kh-body').innerHTML = slice.map(function(k){
     var maTag = k.maKH ? '<span style="font-family:monospace;font-size:.78rem;font-weight:700;color:var(--blue);background:var(--blue-light);padding:1px 6px;border-radius:4px">'+k.maKH+'</span>' : '<span style="color:var(--muted);font-size:.75rem">—</span>';
-    return '<tr>'+
+    var acts = isAdmin()
+      ? '<div class="row-acts">'+
+          '<button class="ic-btn" title="Sửa" onclick="event.stopPropagation();openKHEditModal(\''+k.id+'\')">✏️</button>'+
+          '<button class="ic-btn del" title="Xóa" onclick="event.stopPropagation();askDelete(\'Xóa KH?\',\''+k.ten+'\',function(){deleteKH(\''+k.id+'\')})">🗑️</button>'+
+        '</div>'
+      : '';
+    return '<tr style="cursor:pointer" onclick="openKHDetail(\''+k.id+'\')" title="Xem chi tiết">'+
       '<td>'+maTag+'</td>'+
       '<td style="font-weight:600">'+k.ten+'</td>'+
       '<td><span class="badge '+(k.loai==='Doanh nghiệp'?'b-blue':k.loai==='Trường học'?'b-green':'b-gray')+'">'+k.loai+'</span></td>'+
       '<td class="mono">'+k.sdt+'</td>'+
       '<td style="text-align:center;font-weight:600">'+k.hdCount+'</td>'+
       '<td><span class="amt-pos">+'+fmtM(k.doanhSo)+'</span></td>'+
-      '<td>'+(isAdmin()?'<div class="row-acts"><button class="ic-btn del" onclick="askDelete(\'Xóa KH?\',\''+k.ten+'\',function(){deleteKH(\''+k.id+'\')})">🗑️</button></div>':'')+'</td>'+
+      '<td>'+acts+'</td>'+
     '</tr>';
   }).join('');
   renderPager('kh-pager', rows.length, PAGES.kh, 'goKHPage');
@@ -658,6 +663,132 @@ function saveKH() {
 function deleteKH(id) {
   if (!requireAdmin()) return;
   sbDel('khach_hang',id).then(function(){DB.khachHang=DB.khachHang.filter(function(x){return x.id!==id;});renderKH();toast('🗑️ Đã xóa','info');}).catch(function(e){toast('❌ '+e.message,'error');});
+}
+
+// ─── Chi tiết khách hàng ────────────────────────────────────────────────────
+function openKHDetail(id) {
+  var k = DB.khachHang.find(function(x){return x.id===id;});
+  if(!k) return;
+  var hds      = DB.hopDong.filter(function(h){return h.kh===k.ten;});
+  var doanhThu = hds.reduce(function(s,h){return s+h.giatri;},0);
+  var daThu    = hds.reduce(function(s,h){return s+h.dathu;},0);
+  var conNo    = doanhThu - daThu;
+  var loaiCls  = k.loai==='Doanh nghiệp'?'b-blue':k.loai==='Trường học'?'b-green':'b-gray';
+  var ttMap    = {cho_xe:'Chờ TH',dang_chay:'Đang chạy',hoan_thanh:'Hoàn thành',cho_thanh_toan:'Chờ TT'};
+  var ttCls    = {cho_xe:'b-gray',dang_chay:'b-blue',hoan_thanh:'b-green',cho_thanh_toan:'b-orange'};
+
+  // ---- bảng HĐ gần nhất (tối đa 8) ----
+  var recentHD = hds.slice().sort(function(a,b){return (b.ngay||'').localeCompare(a.ngay||'');}).slice(0,8);
+  var hdRows = recentHD.length
+    ? recentHD.map(function(h){
+        return '<tr>'+
+          '<td style="font-family:monospace;font-size:.78rem">'+h.so+'</td>'+
+          '<td style="font-size:.8rem">'+fmtD(h.ngay)+'</td>'+
+          '<td style="font-size:.8rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(h.tuyen||'—')+'</td>'+
+          '<td style="text-align:right;font-size:.82rem;font-weight:600">'+fmtM(h.giatri)+'</td>'+
+          '<td style="text-align:right;font-size:.82rem;color:'+(h.dathu>=h.giatri?'var(--green)':'var(--orange)')+'">'+fmtM(h.dathu)+'</td>'+
+          '<td><span class="badge '+(ttCls[h.tt]||'b-gray')+'" style="font-size:.68rem">'+(ttMap[h.tt]||h.tt)+'</span></td>'+
+        '</tr>';
+      }).join('')
+    : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Chưa có hợp đồng</td></tr>';
+
+  var adminBtns = isAdmin()
+    ? '<button class="btn btn-ghost" onclick="closeModal();openKHEditModal(\''+id+'\')">✏️ Sửa thông tin</button>'+
+      '<button class="btn" style="background:var(--red-light);color:var(--red);border:1px solid #fecaca" onclick="closeModal();askDelete(\'Xóa khách hàng?\',\''+k.ten+'\',function(){deleteKH(\''+id+'\')})">🗑️ Xóa</button>'
+    : '';
+
+  showModal(
+    'Chi tiết khách hàng',
+    '',
+    // ── Header ──
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">'+
+      (k.maKH?'<span style="font-family:monospace;font-size:.9rem;font-weight:700;color:var(--blue);background:var(--blue-light);padding:3px 10px;border-radius:6px;white-space:nowrap">'+k.maKH+'</span>':'')+
+      '<div style="flex:1">'+
+        '<div style="font-size:1.05rem;font-weight:700;line-height:1.3">'+k.ten+'</div>'+
+        '<div style="margin-top:3px"><span class="badge '+loaiCls+'">'+k.loai+'</span></div>'+
+      '</div>'+
+    '</div>'+
+    // ── Thông tin liên lạc ──
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;font-size:.84rem;color:var(--text2)">'+
+      '<div>📞 <span style="color:var(--text1);font-weight:500">'+(k.sdt||'—')+'</span></div>'+
+      '<div>📍 <span style="color:var(--text1)">'+(k.diaChi||'Chưa có địa chỉ')+'</span></div>'+
+    '</div>'+
+    // ── 4 ô thống kê ──
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1.4rem;font-weight:700;color:var(--blue)">'+hds.length+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Hợp đồng</div>'+
+      '</div>'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1rem;font-weight:700;color:var(--text1)">'+fmtM(doanhThu)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Tổng doanh thu</div>'+
+      '</div>'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px;text-align:center">'+
+        '<div style="font-size:1rem;font-weight:700;color:var(--green)">'+fmtM(daThu)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">Đã thu</div>'+
+      '</div>'+
+      '<div style="background:'+(conNo>0?'#fef2f2':'var(--bg2)')+';border-radius:8px;padding:10px;text-align:center;border:'+(conNo>0?'1px solid #fecaca':'1px solid transparent')+'">'+
+        '<div style="font-size:1rem;font-weight:700;color:'+(conNo>0?'var(--red)':'var(--text3)')+'">'+fmtM(conNo)+'</div>'+
+        '<div style="font-size:.72rem;color:var(--text3);margin-top:2px">'+(conNo>0?'⚠️ Còn nợ':'Không nợ')+'</div>'+
+      '</div>'+
+    '</div>'+
+    // ── Danh sách HĐ ──
+    '<div style="font-weight:600;font-size:.83rem;margin-bottom:6px;color:var(--text2)">📋 Hợp đồng'+(hds.length>8?' ('+hds.length+' tổng, hiển thị 8 gần nhất)':' ('+hds.length+')')+'</div>'+
+    '<div class="table-wrap" style="max-height:220px;overflow-y:auto;border-radius:6px;border:1px solid var(--border)">'+
+      '<table class="dt" style="min-width:440px;font-size:.82rem">'+
+        '<thead><tr><th>Số HĐ</th><th>Ngày</th><th>Tuyến</th><th style="text-align:right">Giá trị</th><th style="text-align:right">Đã thu</th><th>Trạng thái</th></tr></thead>'+
+        '<tbody>'+hdRows+'</tbody>'+
+      '</table>'+
+    '</div>',
+    // ── Footer buttons ──
+    adminBtns + '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'
+  );
+}
+
+// ─── Sửa thông tin khách hàng ───────────────────────────────────────────────
+function openKHEditModal(id) {
+  if (!requireAdmin()) return;
+  var k = DB.khachHang.find(function(x){return x.id===id;});
+  if(!k) return;
+  showModal('Sửa Khách hàng', k.maKH||'',
+    '<div class="form-row">'+
+      '<div class="fg" style="max-width:140px"><label class="fl">Mã KH</label>'+
+        '<input class="fc" value="'+(k.maKH||'')+'" readonly style="background:var(--bg2);color:var(--blue);font-weight:700;font-family:monospace;cursor:default">'+
+      '</div>'+
+      '<div class="fg"><label class="fl">Tên <span class="req">*</span></label><input class="fc" id="ef-ten" value="'+k.ten+'" placeholder="Tên cá nhân / công ty"></div>'+
+    '</div>'+
+    '<div class="form-row">'+
+      '<div class="fg"><label class="fl">Loại</label>'+
+        '<select class="fc" id="ef-loai">'+
+          '<option'+(k.loai==='Doanh nghiệp'?' selected':'')+'>Doanh nghiệp</option>'+
+          '<option'+(k.loai==='Trường học'?' selected':'')+'>Trường học</option>'+
+          '<option'+(k.loai==='Cá nhân'?' selected':'')+'>Cá nhân</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="fg"><label class="fl">SĐT</label><input class="fc" id="ef-sdt" value="'+(k.sdt||'')+'" placeholder="0xxx..."></div>'+
+    '</div>'+
+    '<div class="fg"><label class="fl">Địa chỉ</label><input class="fc" id="ef-diachi" value="'+(k.diaChi||'')+'" placeholder="Địa chỉ..."></div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button>'+
+    '<button class="btn btn-accent" onclick="saveKHEdit(\''+id+'\')">💾 Lưu thay đổi</button>'
+  );
+}
+function saveKHEdit(id) {
+  if (!requireAdmin()) return;
+  var ten = (document.getElementById('ef-ten')||{}).value;
+  if(!ten||!ten.trim()){toast('Nhập tên KH!','error');return;}
+  ten = ten.trim();
+  var row = {
+    ten:  ten,
+    loai: document.getElementById('ef-loai').value,
+    so_dt:document.getElementById('ef-sdt').value,
+    dia_chi:document.getElementById('ef-diachi').value
+  };
+  sbPatch('khach_hang',id,row).then(function(){
+    DB.khachHang = DB.khachHang.map(function(x){
+      return x.id===id ? Object.assign({},x,{ten:ten,loai:row.loai,sdt:row.so_dt,diaChi:row.dia_chi}) : x;
+    });
+    closeModal(); renderKH(); toast('✅ Đã cập nhật '+ten,'success');
+  }).catch(function(e){toast('❌ '+e.message,'error');});
 }
 
 // ═══════════════════════════════════════
