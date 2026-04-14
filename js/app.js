@@ -1873,6 +1873,126 @@ function baoCaoSectionHTML(label){
 }
 
 // ═══════════════════════════════════════
+// REALTIME NOTIFICATIONS (Supabase)
+// ═══════════════════════════════════════
+var _sbRTClient = null;
+var _rtChannel  = null;
+var _rtUnread   = 0;
+
+/* Âm thanh thông báo — Web Audio API (không cần file ngoài) */
+function playNotifChime(){
+  try{
+    var ctx = new (window.AudioContext||window.webkitAudioContext)();
+    function note(freq,start,dur,gain){
+      var o=ctx.createOscillator(), g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type='sine'; o.frequency.value=freq;
+      g.gain.setValueAtTime(0,ctx.currentTime+start);
+      g.gain.linearRampToValueAtTime(gain,ctx.currentTime+start+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+start+dur);
+      o.start(ctx.currentTime+start); o.stop(ctx.currentTime+start+dur+0.05);
+    }
+    note(880,0.00,0.18,0.18);
+    note(1108,0.12,0.22,0.14);
+    note(1320,0.26,0.28,0.12);
+  }catch(e){}
+}
+
+/* Hiển thị card thông báo slide-in góc trên phải */
+function showRTNotif(row){
+  var stack=document.getElementById('rt-notif-stack');
+  if(!stack) return;
+
+  var loaiLabel={
+    do_dau:'⛽ Báo cáo đổ dầu', km_dau:'🔢 Báo cáo Km đầu', km_cuoi:'🏁 Báo cáo Km cuối',
+    hoan_thanh:'✅ Báo cáo hoàn thành', su_co:'⚠️ Báo cáo sự cố', bao_cao_khac:'📄 Báo cáo khác',
+    hop_dong:'📋 Báo cáo hợp đồng', hanh_khach:'👥 Báo cáo hành khách'
+  };
+
+  var ten  = row.tai_xe_ten || row.tai_xe_sdt || 'Tài xế';
+  var bien = row.bien_xe ? '· Xe '+row.bien_xe : '';
+  var hdso = row.hd_so   ? '· HĐ '+row.hd_so  : '';
+  var loai = loaiLabel[row.loai] || ('📋 '+row.loai);
+  var ghiChu = row.ghi_chu ? (row.ghi_chu.length>80 ? row.ghi_chu.slice(0,80)+'…' : row.ghi_chu) : '';
+  var now = new Date();
+  var tStr = now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+
+  var card = document.createElement('div');
+  card.className = 'rt-notif';
+  card.innerHTML =
+    '<div class="rt-notif-head">'
+      +'<div class="rt-notif-title">🔔 Báo cáo mới từ tài xế</div>'
+      +'<button class="rt-notif-close" onclick="this.closest(\'.rt-notif\').classList.add(\'rt-hide\');setTimeout(function(){this.remove()}.bind(this.closest(\'.rt-notif\')),350)">✕</button>'
+    +'</div>'
+    +'<div class="rt-notif-body">'
+      +'<strong>'+ten+'</strong>'
+      +(bien?' <span style="color:var(--text3)">'+bien+'</span>':'')
+      +(hdso?' <span style="color:var(--text3)">'+hdso+'</span>':'')
+      +'<br>'+loai
+      +(ghiChu?'<br><span style="color:var(--text2)">'+ghiChu+'</span>':'')
+    +'</div>'
+    +'<div class="rt-notif-meta">'+tStr+'</div>'
+    +'<div class="rt-notif-progress"></div>';
+
+  stack.appendChild(card);
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){ card.classList.add('rt-show'); });
+  });
+
+  /* Auto-dismiss sau 8 giây */
+  var t = setTimeout(function(){
+    card.classList.add('rt-hide');
+    setTimeout(function(){ if(card.parentNode) card.remove(); }, 350);
+  }, 8000);
+
+  /* Click vào card → mở trang báo cáo hợp đồng nếu có hd_so */
+  card.addEventListener('click', function(e){
+    if(e.target.classList.contains('rt-notif-close')) return;
+    clearTimeout(t);
+    card.classList.add('rt-hide');
+    setTimeout(function(){ if(card.parentNode) card.remove(); }, 350);
+  });
+
+  /* Cập nhật badge chuông */
+  _rtUnread++;
+  var dot = document.getElementById('notifDot');
+  if(dot) dot.style.display='block';
+}
+
+/* Khởi tạo Supabase Realtime — gọi sau khi loadConfig() xong */
+function initRealtime(){
+  if(!SB_URL||!SB_KEY) return;
+  if(typeof supabase==='undefined'||!supabase.createClient){
+    console.warn('[Realtime] Supabase JS chưa load');
+    return;
+  }
+  try{
+    _sbRTClient = supabase.createClient(SB_URL, SB_KEY, {
+      realtime:{ params:{ eventsPerSecond:10 } }
+    });
+
+    _rtChannel = _sbRTClient
+      .channel('nkt_bao_cao_inserts')
+      .on('postgres_changes',{
+        event:'INSERT', schema:'public', table:'bao_cao'
+      }, function(payload){
+        if(!payload||!payload.new) return;
+        playNotifChime();
+        showRTNotif(payload.new);
+      })
+      .subscribe(function(status){
+        if(status==='SUBSCRIBED'){
+          console.log('[Realtime] ✅ Đã kết nối bao_cao INSERT');
+        } else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
+          console.warn('[Realtime] ⚠️ Kết nối lỗi:',status);
+        }
+      });
+  }catch(e){
+    console.warn('[Realtime] Không khởi động được:',e.message);
+  }
+}
+
+// ═══════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async function(){
@@ -1888,6 +2008,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     });
   };
   await loadConfig();
+  initRealtime();   // Kết nối Supabase Realtime — nhận báo cáo tài xế real-time
   // Hiển thị skeleton khi đang tải Supabase
   showSkel('hd-body', 9);
   showSkel('tc-body', 8);
