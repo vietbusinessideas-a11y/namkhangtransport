@@ -127,8 +127,17 @@ function genHDSo(){
   var yy=String(n.getFullYear()).slice(-2);
   var mm=String(n.getMonth()+1).padStart(2,'0');
   var dd=String(n.getDate()).padStart(2,'0');
-  var hh=String(n.getHours()).padStart(2,'0');
-  return 'HD-'+yy+mm+dd+hh;
+  var prefix='HD-'+yy+mm+dd;
+  // Tìm số thứ tự lớn nhất trong ngày hôm nay (HD-YYMMDDXX)
+  var maxSeq=0;
+  (DB.hopDong||[]).forEach(function(h){
+    if(h.so&&h.so.startsWith(prefix)){
+      var seq=parseInt((h.so+'').slice(-2))||0;
+      if(seq>maxSeq) maxSeq=seq;
+    }
+  });
+  var next=Math.min(maxSeq+1,99);
+  return prefix+String(next).padStart(2,'0');
 }
 function pct(a,b){return b?((a-b)/b*100).toFixed(1):'0.0';}
 var TTMAP={cho_xe:'<span class="badge b-gray">Chờ thực hiện</span>',dang_chay:'<span class="badge b-blue">Đang thực hiện</span>',hoan_thanh:'<span class="badge b-green">Hoàn thành</span>'};
