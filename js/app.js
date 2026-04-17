@@ -542,6 +542,7 @@ function renderDashboard(){
   }).join('');
 
   // Top tài xế
+  _dashYM=ym; // lưu lại để showAllDriverRank() dùng
   var driverEl=document.getElementById('db-driver-rank');
   var subEl=document.getElementById('db-driver-sub');if(subEl)subEl.textContent='Theo tháng '+mm+'/'+yyyy;
   if(driverEl){
@@ -551,6 +552,60 @@ function renderDashboard(){
       driverEl.innerHTML=txRank.slice(0,5).map(function(tx,i){return'<div class="rank-item" style="cursor:pointer" title="Xem chi tiết '+tx.ten+'" onclick="openTXDetail(\''+encodeURIComponent(tx.ten)+'\',\''+ym+'\')"><div class="rank-num '+(i<3?'r'+(i+1):'rn')+'">'+(rIco[i]||i+1)+'</div><div class="rank-info"><div class="rank-name">'+tx.ten+'</div><div class="rank-meta">'+tx.chuyen+' chuyến</div></div><div style="flex:1;padding:0 16px"><div class="mini-bar-wrap"><div class="mini-bar"><div class="mini-fill" style="width:'+Math.round(tx.rev/maxRev*100)+'%;background:var(--green)"></div></div><div class="mini-pct">'+Math.round(tx.rev/maxRev*100)+'%</div></div></div><div class="rank-amount">'+fmtM(tx.rev)+'</div></div>';}).join('');}
   }
 }
+
+// ── Dashboard: Bảng xếp hạng tài xế đầy đủ ─────────────────────────────────
+var _dashYM='';
+function showAllDriverRank(){
+  var ym=_dashYM||getMY(new Date().toISOString().slice(0,10).replace(/-/g,'/').slice(0,7));
+  var parts=ym.split('/');var mm=parts[0],yyyy=parts[1];
+  // Xây danh sách tất cả tài xế + tính doanh thu tháng
+  var txRank=DB.taiXe.map(function(tx){
+    var hds=DB.hopDong.filter(function(h){return h.taixe===tx.ten&&getMY(h.ngay_di||h.ngay||'')===ym;});
+    var hoanthanh=hds.filter(function(h){return _isCompleted(h);});
+    return{id:tx.id,ten:tx.ten,chuyen:hds.length,hoanThanh:hoanthanh.length,rev:hoanthanh.reduce(function(s,h){return s+h.giatri;},0)};
+  }).filter(function(tx){return tx.chuyen>0||tx.rev>0;}).sort(function(a,b){return b.rev-a.rev;});
+  var total=txRank.reduce(function(s,t){return s+t.rev;},0)||1;
+  var maxRev=txRank.length?txRank[0].rev||1:1;
+  var rIco=['🥇','🥈','🥉'];
+  // Tháng selector (6 tháng gần đây)
+  var months6=[];var d0=new Date();
+  for(var i=0;i<6;i++){var dd=new Date(d0.getFullYear(),d0.getMonth()-i,1);months6.push(String(dd.getMonth()+1).padStart(2,'0')+'/'+dd.getFullYear());}
+  var monthSel='<select id="rank-ym-sel" style="font-size:.78rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer" onchange="showAllDriverRankForYM(this.value)">'+months6.map(function(m){return'<option value="'+m+'"'+(m===ym?' selected':'')+'>Tháng '+m+'</option>';}).join('')+'</select>';
+  var body='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
+    +'<div style="font-size:.82rem;color:var(--text2)">Doanh thu từ <strong>'+txRank.length+'</strong> tài xế có chuyến trong tháng</div>'
+    +monthSel
+    +'</div>';
+  if(!txRank.length){
+    body+='<div style="padding:40px;text-align:center;color:var(--text3)">Không có dữ liệu tháng '+mm+'/'+yyyy+'</div>';
+  } else {
+    body+='<div id="rank-list">'
+      +txRank.map(function(tx,i){
+        var pct=Math.round(tx.rev/maxRev*100);
+        var share=Math.round(tx.rev/total*100);
+        return'<div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;border-radius:6px" onmouseenter="this.style.background=\'var(--surface2)\'" onmouseleave="this.style.background=\'\'" onclick="closeModal();setTimeout(function(){openTXDetail(\''+encodeURIComponent(tx.ten)+'\',\''+ym+'\')},120)">'
+          +'<div style="width:28px;text-align:center;font-size:'+(i<3?'.9':'0.78')+'rem;font-weight:700;flex-shrink:0">'+(rIco[i]||'<span style="color:var(--text3)">'+(i+1)+'</span>')+'</div>'
+          +'<div style="flex:1;min-width:0">'
+            +'<div style="font-weight:600;font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+tx.ten+'</div>'
+            +'<div style="font-size:.68rem;color:var(--text3);margin-top:1px">'+tx.chuyen+' chuyến · '+tx.hoanThanh+' hoàn thành</div>'
+          +'</div>'
+          +'<div style="flex:2;padding:0 12px">'
+            +'<div style="display:flex;align-items:center;gap:6px">'
+              +'<div style="flex:1;height:6px;background:var(--surface2);border-radius:3px"><div style="width:'+pct+'%;height:100%;background:var(--green);border-radius:3px;transition:width .3s"></div></div>'
+              +'<span style="font-size:.68rem;color:var(--text3);width:32px;text-align:right">'+share+'%</span>'
+            +'</div>'
+          +'</div>'
+          +'<div style="font-weight:700;font-size:.82rem;color:var(--green);font-family:\'DM Mono\',monospace;flex-shrink:0;min-width:60px;text-align:right">'+fmtM(tx.rev)+'</div>'
+        +'</div>';
+      }).join('')
+    +'</div>';
+    body+='<div style="margin-top:12px;padding:10px 4px;display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--border)">'
+      +'<span style="font-size:.78rem;font-weight:700;color:var(--text2)">Tổng doanh thu (HĐ hoàn thành)</span>'
+      +'<span style="font-weight:700;font-size:.88rem;color:var(--green);font-family:\'DM Mono\',monospace">'+fmtM(txRank.reduce(function(s,t){return s+t.rev;},0))+'</span>'
+    +'</div>';
+  }
+  showModal('🏆 Bảng xếp hạng Tài xế','Tháng '+mm+'/'+yyyy,body,'<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>');
+}
+function showAllDriverRankForYM(ym){ _dashYM=ym; showAllDriverRank(); }
 
 // ── Dashboard KPI drill-down modals ─────────────────────────────────────────
 function showDBDoanhThu(ym){
