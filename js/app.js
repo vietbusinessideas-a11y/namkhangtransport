@@ -1179,19 +1179,94 @@ function openTCDetail(id){var t=DB.thuChi.find(function(x){return x.id===id;});i
 function openTCModal(type){
   var isThu=type==='thu';
   var loaiOpts=isThu?'<option>Thu hợp đồng</option><option>Đặt cọc</option><option>Thu khác</option>':'<option>Nhiên liệu</option><option>Lương tài xế</option><option>Sửa chữa</option><option>Cầu đường</option><option>Bảo dưỡng</option><option>Khác</option>';
-  var hdOpts='<option value="">—</option>'+DB.hopDong.map(function(h){return'<option value="'+h.id+'">'+h.so+' · '+h.kh+'</option>';}).join('');
-  var xeOpts='<option value="">—</option>'+DB.xe.map(function(x){return'<option>'+x.bien+'</option>';}).join('');
-  var txOpts='<option value="">—</option>'+DB.taiXe.map(function(t){return'<option>'+t.ten+'</option>';}).join('');
+  var xeOpts='<option value="">—</option>'+DB.xe.map(function(x){return'<option value="'+x.bien+'">'+x.bien+'</option>';}).join('');
+  var txOpts='<option value="">—</option>'+DB.taiXe.map(function(t){return'<option value="'+t.ten+'">'+t.ten+'</option>';}).join('');
   var today=new Date().toISOString().slice(0,10);var timeNow=new Date().toTimeString().slice(0,5);
+
+  // KH datalist — gợi ý cả tên và mã KH
+  var khDatalist='<datalist id="tc-kh-list">'+DB.khachHang.map(function(k){return'<option value="'+k.ten+'">'+(k.maKH?k.maKH+' – ':'')+k.ten+'</option>';}).join('')+'</datalist>';
+
+  // HĐ còn công nợ (cho Thu) hoặc toàn bộ (cho Chi)
+  var hdInitOpts=isThu
+    ?('<option value="">— Chọn hợp đồng —</option>'+DB.hopDong.filter(function(h){return h.giatri>h.dathu;}).map(function(h){var con=h.giatri-h.dathu;return'<option value="'+h.id+'">'+h.so+' · '+h.kh+' (còn '+fmtM(con)+')</option>';}).join(''))
+    :('<option value="">—</option>'+DB.hopDong.map(function(h){return'<option value="'+h.id+'">'+h.so+' · '+h.kh+'</option>';}).join(''));
+
+  var khField=isThu
+    ?('<div class="fg"><label class="fl">Khách hàng</label>'+khDatalist
+      +'<input class="fc" id="f-kh" list="tc-kh-list" placeholder="Gõ tên hoặc mã KH để gợi ý..." oninput="tcFilterHDByKH()" autocomplete="off"></div>')
+    :('<div class="fg"><label class="fl">Đối tác</label>'+khDatalist
+      +'<input class="fc" id="f-kh" list="tc-kh-list" placeholder="Tên KH / nhà cung cấp"></div>');
+
+  var hdLabel=isThu
+    ?'Hợp đồng liên kết <span style="font-size:.67rem;font-weight:400;color:var(--orange);margin-left:4px">★ chỉ HĐ còn công nợ</span>'
+    :'Liên kết HĐ';
+  var hdOnChange=isThu?' onchange="tcOnHDChange()"':'';
+
   showModal(isThu?'💰 Ghi nhận Thu':'💸 Ghi nhận Chi','',
-    '<div class="fg"><label class="fl">Loại <span class="req">*</span></label><select class="fc" id="f-loai">'+loaiOpts+'</select></div>'+
-    '<div class="form-row"><div class="fg"><label class="fl">Ngày <span class="req">*</span></label><input type="date" class="fc" id="f-ngay" value="'+today+'"></div><div class="fg"><label class="fl">Giờ</label><input type="time" class="fc" id="f-gio" value="'+timeNow+'"></div></div>'+
-    '<div class="fg"><label class="fl">Số tiền (VNĐ) <span class="req">*</span></label><input type="text" inputmode="numeric" class="fc" id="f-sotien" placeholder="0" oninput="fmtInput(this)"></div>'+
-    '<div class="form-row"><div class="fg"><label class="fl">Liên kết HĐ</label><select class="fc" id="f-hd">'+hdOpts+'</select></div><div class="fg"><label class="fl">Hình thức TT</label><select class="fc" id="f-httt"><option>Chuyển khoản</option><option>Tiền mặt</option></select></div></div>'+
-    '<div class="form-row"><div class="fg"><label class="fl">Xe</label><select class="fc" id="f-xe">'+xeOpts+'</select></div><div class="fg"><label class="fl">Tài xế</label><select class="fc" id="f-taixe">'+txOpts+'</select></div></div>'+
-    '<div class="fg"><label class="fl">Đối tác</label><input class="fc" id="f-kh" placeholder="Tên KH / nhà cung cấp"></div>'+
-    '<div class="fg"><label class="fl">Mô tả</label><textarea class="fc" id="f-mota" rows="2" style="resize:vertical"></textarea></div>',
+    '<div class="fg"><label class="fl">Loại <span class="req">*</span></label><select class="fc" id="f-loai">'+loaiOpts+'</select></div>'
+    +'<div class="form-row"><div class="fg"><label class="fl">Ngày <span class="req">*</span></label><input type="date" class="fc" id="f-ngay" value="'+today+'"></div><div class="fg"><label class="fl">Giờ</label><input type="time" class="fc" id="f-gio" value="'+timeNow+'"></div></div>'
+    +'<div class="fg"><label class="fl">Số tiền (VNĐ) <span class="req">*</span></label><input type="text" inputmode="numeric" class="fc" id="f-sotien" placeholder="0" oninput="fmtInput(this)"></div>'
+    +khField
+    +'<div class="form-row">'
+      +'<div class="fg"><label class="fl">'+hdLabel+'</label>'
+        +'<select class="fc" id="f-hd"'+hdOnChange+'>'+hdInitOpts+'</select>'
+        +(isThu?'<div id="tc-hd-info" style="display:none;margin-top:6px;padding:8px 10px;background:var(--surface2);border-radius:6px;font-size:.72rem;line-height:1.6"></div>':'')
+      +'</div>'
+      +'<div class="fg"><label class="fl">Hình thức TT</label><select class="fc" id="f-httt"><option>Chuyển khoản</option><option>Tiền mặt</option></select></div>'
+    +'</div>'
+    +'<div class="form-row">'
+      +'<div class="fg"><label class="fl">Xe</label><select class="fc" id="f-xe" onchange="tcCheckXeMatch()">'+xeOpts+'</select></div>'
+      +'<div class="fg"><label class="fl">Tài xế</label><select class="fc" id="f-taixe" onchange="tcCheckXeMatch()">'+txOpts+'</select></div>'
+    +'</div>'
+    +'<div id="tc-xe-warn" style="display:none;margin:-4px 0 8px;padding:9px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:7px;font-size:.76rem;color:#92400e">⚠️ Xe và tài xế đang chọn không khớp với hợp đồng này, cần xem lại!</div>'
+    +'<div class="fg"><label class="fl">Mô tả</label><textarea class="fc" id="f-mota" rows="2" style="resize:vertical"></textarea></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn" style="background:'+(isThu?'var(--green)':'var(--red)')+';color:#fff" onclick="saveTC(\''+type+'\')">💾 Lưu</button>');
+}
+function tcFilterHDByKH(){
+  var q=(document.getElementById('f-kh').value||'').trim().toLowerCase();
+  var sel=document.getElementById('f-hd');if(!sel)return;
+  // Tìm KH khớp chính xác (tên hoặc mã)
+  var matchKH=DB.khachHang.find(function(k){return k.ten.toLowerCase()===q||(k.maKH&&k.maKH.toLowerCase()===q);});
+  var filtered=DB.hopDong.filter(function(h){
+    if(h.giatri<=h.dathu)return false;
+    if(!q)return true;
+    if(matchKH)return h.kh===matchKH.ten;
+    return h.kh.toLowerCase().includes(q)||(h.maKH&&h.maKH.toLowerCase().includes(q));
+  });
+  sel.innerHTML='<option value="">— Chọn hợp đồng —</option>'+filtered.map(function(h){var con=h.giatri-h.dathu;return'<option value="'+h.id+'">'+h.so+' · '+h.kh+' (còn '+fmtM(con)+')</option>';}).join('');
+  var info=document.getElementById('tc-hd-info');if(info)info.style.display='none';
+  var warn=document.getElementById('tc-xe-warn');if(warn)warn.style.display='none';
+  // Nếu chỉ còn 1 HĐ → tự chọn luôn
+  if(filtered.length===1){sel.value=filtered[0].id;tcOnHDChange();}
+}
+function tcOnHDChange(){
+  var hdId=document.getElementById('f-hd').value;
+  var info=document.getElementById('tc-hd-info');
+  var warn=document.getElementById('tc-xe-warn');
+  if(!hdId){if(info)info.style.display='none';if(warn)warn.style.display='none';return;}
+  var h=DB.hopDong.find(function(x){return x.id===hdId;});if(!h)return;
+  // Hiển thị thông tin thanh toán HĐ
+  if(info){
+    var con=h.giatri-h.dathu;var pct=h.giatri?Math.round(h.dathu/h.giatri*100):0;
+    info.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-weight:600">'+h.so+'</span><span style="color:var(--orange);font-weight:700">Còn lại: '+fmtM(con)+'</span></div>'
+      +'<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:5px;background:#e2e8f0;border-radius:3px"><div style="width:'+pct+'%;height:100%;background:var(--green);border-radius:3px"></div></div><span style="color:var(--text3);font-size:.68rem">Đã thu '+pct+'% · '+fmtM(h.dathu)+' / '+fmtM(h.giatri)+'</span></div>';
+    info.style.display='';
+  }
+  // Auto-fill xe và tài xế từ HĐ
+  var xeSel=document.getElementById('f-xe');var txSel=document.getElementById('f-taixe');
+  if(xeSel&&h.xe){for(var i=0;i<xeSel.options.length;i++){if(xeSel.options[i].value===h.xe){xeSel.value=h.xe;break;}}}
+  if(txSel&&h.taixe){for(var j=0;j<txSel.options.length;j++){if(txSel.options[j].value===h.taixe){txSel.value=h.taixe;break;}}}
+  if(warn)warn.style.display='none';
+}
+function tcCheckXeMatch(){
+  var hdId=(document.getElementById('f-hd')||{}).value;
+  var warn=document.getElementById('tc-xe-warn');if(!warn)return;
+  if(!hdId){warn.style.display='none';return;}
+  var h=DB.hopDong.find(function(x){return x.id===hdId;});if(!h){warn.style.display='none';return;}
+  var xeVal=(document.getElementById('f-xe')||{}).value||'';
+  var txVal=(document.getElementById('f-taixe')||{}).value||'';
+  var mismatch=(h.xe&&xeVal&&xeVal!==h.xe)||(h.taixe&&txVal&&txVal!==h.taixe);
+  warn.style.display=mismatch?'':'none';
 }
 function saveTC(type){
   var raw=document.getElementById('f-sotien').value.replace(/[.,\s]/g,'');
