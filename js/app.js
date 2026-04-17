@@ -1635,7 +1635,7 @@ function renderBCXe(){
     v.hds.push(h.so);
   });
   // Chi phí xe gắn trực tiếp HĐ trong kỳ
-  DB.thuChi.filter(function(t){return t.type==='chi'&&t.xe&&_inP(t.ngay||'');}).forEach(function(t){
+  DB.thuChi.filter(function(t){return t.type==='chi'&&t.xe&&_inP(t.ngay||'')&&_shouldCountChi(t);}).forEach(function(t){
     if(!xeMap[t.xe])xeMap[t.xe]={bien:t.xe,loai:'',chuyen:0,doanhThu:0,chiPhi:0,hds:[]};
     xeMap[t.xe].chiPhi+=t.sotien;
   });
@@ -1746,7 +1746,7 @@ function renderBCTaiXe(){
     if(h.tuyen)v.tuyen[h.tuyen]=(v.tuyen[h.tuyen]||0)+1;
   });
   // Chi phí tài xế trong kỳ (lương + chi có gắn tài xế)
-  DB.thuChi.filter(function(t){return t.type==='chi'&&t.taixe&&_inP(t.ngay||'');}).forEach(function(t){
+  DB.thuChi.filter(function(t){return t.type==='chi'&&t.taixe&&_inP(t.ngay||'')&&_shouldCountChi(t);}).forEach(function(t){
     if(!txMap[t.taixe])txMap[t.taixe]={ten:t.taixe,chuyen:0,doanhThu:0,chiPhi:0,tuyen:{}};
     txMap[t.taixe].chiPhi+=t.sotien;
   });
@@ -1827,10 +1827,15 @@ function _sumDoanhThuThang(ymStr){
     return _isCompleted(h)&&(h.ngay_di||h.ngay||'').slice(0,7)===ymStr;
   }).reduce(function(s,h){return s+h.giatri;},0);
 }
-// Chi phí: từ thu_chi.type='chi'
+// Chi phí: overhead luôn tính; chi trực tiếp (có hd_id) chỉ tính khi HĐ hoàn thành
+function _shouldCountChi(tc){
+  if(!tc.hd_id) return true; // overhead (lương, bảo dưỡng...) → luôn tính
+  var hd=DB.hopDong.find(function(h){return h.id===tc.hd_id;});
+  return hd&&_isCompleted(hd);
+}
 function _sumChiThang(ymStr){
   return DB.thuChi.filter(function(tc){
-    return tc.type==='chi'&&(tc.ngay||'').slice(0,7)===ymStr;
+    return tc.type==='chi'&&(tc.ngay||'').slice(0,7)===ymStr&&_shouldCountChi(tc);
   }).reduce(function(s,tc){return s+tc.sotien;},0);
 }
 
@@ -1921,7 +1926,7 @@ function renderBC(){
   // doanh thu = giá trị HĐ đã HOÀN THÀNH trong kỳ
   function _inPeriod(dateStr,ymList){return ymList.indexOf((dateStr||'').slice(0,7))>=0;}
   var thu=DB.hopDong.filter(function(h){return _isCompleted(h)&&_inPeriod(h.ngay_di||h.ngay||'',d.ymList);}).reduce(function(s,h){return s+h.giatri;},0);
-  var chi=DB.thuChi.filter(function(tc){return tc.type==='chi'&&_inPeriod(tc.ngay||'',d.ymList);}).reduce(function(s,tc){return s+tc.sotien;},0);
+  var chi=DB.thuChi.filter(function(tc){return tc.type==='chi'&&_inPeriod(tc.ngay||'',d.ymList)&&_shouldCountChi(tc);}).reduce(function(s,tc){return s+tc.sotien;},0);
   var ln=thu-chi;
   // prev period: bars[0]=current, bars[1]=kỳ trước (sau reverse)
   var prev=d.bars[1]||{thu:0,chi:0};
@@ -1947,7 +1952,7 @@ function renderBC(){
   var veh=DB.xe.map(function(x){
     var hdsXe=DB.hopDong.filter(function(h){return h.xe===x.bien&&_inPeriod(h.ngay_di||h.ngay||'',d.ymList);});
     var t=hdsXe.reduce(function(s,h){return s+h.giatri;},0);
-    var c=DB.thuChi.filter(function(tc){return tc.type==='chi'&&tc.xe===x.bien&&_inPeriod(tc.ngay||'',d.ymList);}).reduce(function(s,tc){return s+tc.sotien;},0);
+    var c=DB.thuChi.filter(function(tc){return tc.type==='chi'&&tc.xe===x.bien&&_inPeriod(tc.ngay||'',d.ymList)&&_shouldCountChi(tc);}).reduce(function(s,tc){return s+tc.sotien;},0);
     return{b:x.bien,l:x.loai||'',t:t,c:c,n:hdsXe.length};
   }).filter(function(v){return v.t>0||v.c>0||v.n>0;}).sort(function(a,b){return b.t-a.t;});
   document.getElementById('bc-xe-table').innerHTML=veh.length?veh.map(function(v){var ln2=v.t-v.c,ts=v.t>0?Math.round(ln2/v.t*100):0;var bc=ts>=30?'var(--green)':ts>=20?'var(--accent)':'var(--orange)';return'<tr style="cursor:pointer" title="Xem chi tiết HĐ của '+v.b+'" onclick="openXeDetailBC(\''+encodeURIComponent(v.b)+'\')"><td><div style="font-weight:600;font-size:.78rem">'+v.b+'</div><div style="font-size:.67rem;color:var(--text3)">'+v.l+'</div></td><td><span class="amt-pos">'+fmtM(v.t)+'</span><div style="font-size:.65rem;color:var(--text3)">'+v.n+' HĐ</div></td><td>'+(v.c>0?'<span class="amt-neg">-'+fmtM(v.c)+'</span>':'<span style="color:var(--text3)">—</span>')+'</td><td style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+(ln2>=0?'var(--accent)':'var(--red)')+'">'+fmtM(ln2)+'</td><td><div class="mini-bar-wrap"><div class="mini-bar"><div class="mini-fill" style="width:'+ts+'%;background:'+bc+'"></div></div><span class="mini-pct">'+ts+'%</span></div></td></tr>';}).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px;font-size:.8rem">Chưa có HĐ hoàn thành trong kỳ này</td></tr>';
