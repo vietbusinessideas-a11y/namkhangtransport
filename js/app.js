@@ -290,6 +290,48 @@ function loadDB(){
 // NAV
 // ═══════════════════════════════════════
 var currentPage='dashboard';
+// ── Navigation History (nút Back) ────────────────────────────────────────────
+var NAV_HISTORY = [];
+
+function _snapNavState(){
+  return {
+    page:       currentPage,
+    hdTT:       (document.getElementById('hd-filter-tt')    ||{}).value||'',
+    hdMonth:    (document.getElementById('hd-filter-month') ||{}).value||'',
+    hdSearch:   (document.getElementById('hd-search')       ||{}).value||''
+  };
+}
+function _updateBackBtn(){
+  var btn=document.getElementById('back-btn');
+  if(btn) btn.style.display = NAV_HISTORY.length > 0 ? 'flex' : 'none';
+}
+function goBack(){
+  if(!NAV_HISTORY.length) return;
+  var prev=NAV_HISTORY.pop();
+  // Khôi phục filters trước khi render
+  var elTT=document.getElementById('hd-filter-tt');
+  var elMo=document.getElementById('hd-filter-month');
+  var elQ =document.getElementById('hd-search');
+  if(elTT) elTT.value = prev.hdTT||'';
+  if(elMo) elMo.value = prev.hdMonth||'';
+  if(elQ)  elQ.value  = prev.hdSearch||'';
+  _navInternal(prev.page);
+  _updateBackBtn();
+}
+// navTo nội bộ — KHÔNG đẩy history (dùng trong goBack và lần đầu load)
+function _navInternal(page){
+  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.toggle('active',n.dataset.page===page);});
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  var pg=document.getElementById('page-'+page); if(pg)pg.classList.add('active');
+  currentPage=page;
+  var m=PAGE_META[page]||{title:page,sub:'',actions:function(){return'';}};
+  document.getElementById('pageTitle').textContent=m.title;
+  document.getElementById('pageSub').textContent=m.sub;
+  document.getElementById('topbarActions').innerHTML=m.actions();
+  if(window.innerWidth<768)closeSidebar();
+  renderCurrentPage();
+}
+
 var PAGE_META={
   dashboard:{title:'Dashboard',sub:'',actions:function(){return'';}},
   hopdong:{title:'Hợp đồng',sub:'Quản lý hợp đồng vận chuyển',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="openHDModal()">＋ Thêm hợp đồng</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportHD()">📥 Xuất Excel</button>';}},
@@ -300,16 +342,14 @@ var PAGE_META={
   caidat:{title:'Cài đặt',sub:'Thông tin hệ thống',actions:function(){return'';}},
 };
 function navTo(page){
-  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.toggle('active',n.dataset.page===page);});
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
-  var pg=document.getElementById('page-'+page);if(pg)pg.classList.add('active');
-  currentPage=page;
-  var m=PAGE_META[page]||{title:page,sub:'',actions:function(){return'';}};
-  document.getElementById('pageTitle').textContent=m.title;
-  document.getElementById('pageSub').textContent=m.sub;
-  document.getElementById('topbarActions').innerHTML=m.actions();
-  if(window.innerWidth<768)closeSidebar();
-  renderCurrentPage();
+  // Chỉ push history khi thực sự đổi trang (tránh duplicate khi click cùng menu item)
+  if(page !== currentPage){
+    NAV_HISTORY.push(_snapNavState());
+    // Giới hạn stack 20 bước để tránh memory leak
+    if(NAV_HISTORY.length > 20) NAV_HISTORY.shift();
+  }
+  _navInternal(page);
+  _updateBackBtn();
 }
 function renderCurrentPage(){
   populateHDMonthFilter(); // Cập nhật dropdown tháng mỗi khi data thay đổi
@@ -317,11 +357,15 @@ function renderCurrentPage(){
   if(fns[currentPage])fns[currentPage]();
 }
 // Điều hướng đến trang HĐ và set filter trạng thái
+// Luôn push history kể cả khi đã ở trang hopdong (vì filter thay đổi = "bước mới")
 function navToHD(tt){
+  NAV_HISTORY.push(_snapNavState());
+  if(NAV_HISTORY.length > 20) NAV_HISTORY.shift();
   var sel=document.getElementById('hd-filter-tt');
   if(sel) sel.value = tt||'';
   PAGES.hd=1;
-  navTo('hopdong');
+  _navInternal('hopdong');
+  _updateBackBtn();
 }
 function updateBadges(){
   var active=DB.hopDong.filter(function(h){return h.tt!=='hoan_thanh';}).length;

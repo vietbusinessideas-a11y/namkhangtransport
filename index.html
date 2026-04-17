@@ -53,7 +53,11 @@
 </aside>
 <main class="main">
   <div class="topbar">
-    <div class="topbar-left"><button class="menu-btn" onclick="toggleSidebar()">☰</button><div><div class="page-title" id="pageTitle">Dashboard</div><div class="page-sub" id="pageSub">Tháng 4, 2026</div></div></div>
+    <div class="topbar-left">
+      <button id="back-btn" onclick="goBack()" title="Quay lại trang trước">‹</button>
+      <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+      <div><div class="page-title" id="pageTitle">Dashboard</div><div class="page-sub" id="pageSub">Tháng 4, 2026</div></div>
+    </div>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="topbar-right" id="topbarActions"></div>
       <button class="btn btn-ghost" style="position:relative;padding:7px 10px" onclick="toggleNotifPanel()" id="notifBtn">🔔<span id="notifDot" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid #fff"></span></button>
