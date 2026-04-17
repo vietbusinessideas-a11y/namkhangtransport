@@ -298,7 +298,9 @@ function _snapNavState(){
     page:       currentPage,
     hdTT:       (document.getElementById('hd-filter-tt')    ||{}).value||'',
     hdMonth:    (document.getElementById('hd-filter-month') ||{}).value||'',
-    hdSearch:   (document.getElementById('hd-search')       ||{}).value||''
+    hdSearch:   (document.getElementById('hd-search')       ||{}).value||'',
+    tcMonth:    (document.getElementById('tc-month')        ||{}).value||'',
+    tcTab:      tcTab||'all'
   };
 }
 function _updateBackBtn(){
@@ -315,6 +317,9 @@ function goBack(){
   if(elTT) elTT.value = prev.hdTT||'';
   if(elMo) elMo.value = prev.hdMonth||'';
   if(elQ)  elQ.value  = prev.hdSearch||'';
+  var elTCM=document.getElementById('tc-month');
+  if(elTCM&&prev.tcMonth) elTCM.value=prev.tcMonth;
+  if(prev.tcTab) tcTab=prev.tcTab;
   _navInternal(prev.page);
   _updateBackBtn();
 }
@@ -365,6 +370,31 @@ function navToHD(tt){
   if(sel) sel.value = tt||'';
   PAGES.hd=1;
   _navInternal('hopdong');
+  _updateBackBtn();
+}
+function navToTC(ym, type){
+  NAV_HISTORY.push(_snapNavState());
+  if(NAV_HISTORY.length > 20) NAV_HISTORY.shift();
+  // Populate tc-month options if not already present, then set value
+  var sel=document.getElementById('tc-month');
+  if(sel){
+    var found=false;
+    for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===ym){found=true;break;}}
+    if(!found){var opt=document.createElement('option');opt.value=ym;opt.textContent='Tháng '+ym;sel.add(opt,1);}
+    sel.value=ym;
+    var dr=document.getElementById('tc-date-range');if(dr)dr.style.display='none';
+  }
+  tcTab=type||'all';
+  PAGES.tc=1;
+  _navInternal('thuchi');
+  // Activate the correct tab button after rendering
+  setTimeout(function(){
+    document.querySelectorAll('#page-thuchi .tab').forEach(function(b){
+      b.classList.remove('active');
+      if(b.getAttribute('onclick')&&b.getAttribute('onclick').indexOf("'"+tcTab+"'")>-1)b.classList.add('active');
+    });
+    renderTCAll();
+  },50);
   _updateBackBtn();
 }
 function updateBadges(){
@@ -434,9 +464,9 @@ function renderDashboard(){
   // Biểu đồ 6 tháng
   var months6=[];var d0=new Date(yyyy,mm-1,1);
   for(var i=5;i>=0;i--){var dd=new Date(d0.getFullYear(),d0.getMonth()-i,1);var mmStr=String(dd.getMonth()+1).padStart(2,'0');months6.push({l:'T'+(dd.getMonth()+1),ym:mmStr+'/'+dd.getFullYear(),cur:i===0});}
-  var bd=months6.map(function(m){var t=getMonthTotals(m.ym);return{l:m.l,thu:t.thu,chi:t.chi,cur:m.cur};});
+  var bd=months6.map(function(m){var t=getMonthTotals(m.ym);return{l:m.l,ym:m.ym,thu:t.thu,chi:t.chi,cur:m.cur};});
   var mx=Math.max.apply(null,bd.map(function(b){return Math.max(b.thu,b.chi);}));mx=mx||1;
-  document.getElementById('db-bar').innerHTML=bd.map(function(b){var th=Math.max(3,Math.round(b.thu/mx*100));var ch=Math.max(b.chi?3:0,Math.round(b.chi/mx*100));var lp=Math.max(b.thu-b.chi>0?3:0,Math.round((b.thu-b.chi)/mx*100));return'<div class="bar-group"><div class="bars"><div class="bar" style="height:'+th+'%;background:'+(b.cur?'#15803d':'#86efac')+'"></div><div class="bar" style="height:'+ch+'%;background:'+(b.cur?'#ef4444':'#fca5a5')+'"></div><div class="bar" style="height:'+lp+'%;background:'+(b.cur?'#64748b':'#cbd5e1')+'"></div></div><div class="bar-lbl" style="'+(b.cur?'color:var(--green);font-weight:700':'')+'">'+b.l+(b.cur?' ●':'')+'</div></div>';}).join('');
+  document.getElementById('db-bar').innerHTML=bd.map(function(b){var th=Math.max(3,Math.round(b.thu/mx*100));var ch=Math.max(b.chi?3:0,Math.round(b.chi/mx*100));var lp=Math.max(b.thu-b.chi>0?3:0,Math.round((b.thu-b.chi)/mx*100));return'<div class="bar-group"><div class="bars"><div class="bar" title="Thu '+b.l+': '+fmtM(b.thu)+' — Bấm để xem chi tiết" style="height:'+th+'%;background:'+(b.cur?'#15803d':'#86efac')+';cursor:pointer" onclick="navToTC(\''+b.ym+'\',\'thu\')"></div><div class="bar" title="Chi '+b.l+': '+fmtM(b.chi)+' — Bấm để xem chi tiết" style="height:'+ch+'%;background:'+(b.cur?'#ef4444':'#fca5a5')+';cursor:pointer" onclick="navToTC(\''+b.ym+'\',\'chi\')"></div><div class="bar" style="height:'+lp+'%;background:'+(b.cur?'#64748b':'#cbd5e1')+'"></div></div><div class="bar-lbl" style="'+(b.cur?'color:var(--green);font-weight:700':'')+'">'+b.l+(b.cur?' ●':'')+'</div></div>';}).join('');
 
   // Cơ cấu chi phí — dynamic theo tháng đang xem
   var chiItems=DB.thuChi.filter(function(t){return getMY(t.ngay)===ym&&t.type==='chi';});
