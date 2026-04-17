@@ -1670,13 +1670,14 @@ function renderBCHopDong(){
   var d=buildBC()[bcPeriod];
   var ymList=d.ymList;
   function _inP(h){return ymList.indexOf((h.ngay_di||h.ngay||'').slice(0,7))>=0;}
-  var rows=DB.hopDong.filter(_inP).map(function(h){
-    // Doanh thu chỉ tính khi HĐ đã HOÀN THÀNH
-    var doanhThu=_isCompleted(h)?h.giatri:0;
-    // Chi trực tiếp: phiếu chi có liên kết HĐ
+  // Chỉ hiển thị HĐ đã HOÀN THÀNH trong kỳ (hoan_thanh hoặc cho_thanh_toan)
+  var rows=DB.hopDong.filter(function(h){return _isCompleted(h)&&_inP(h);}).map(function(h){
+    // Doanh thu = giá trị HĐ (HĐ đã được lọc hoàn thành rồi)
+    var doanhThu=h.giatri;
+    // Chi trực tiếp: phiếu chi có liên kết HĐ này
     var chiTrucTiep=DB.thuChi.filter(function(t){return t.type==='chi'&&t.hd_id===h.id;}).reduce(function(s,t){return s+t.sotien;},0);
-    // Chi phí phân bổ từ chi phí xe/tài xế cố định (chỉ tính khi hoàn thành)
-    var alloc=_isCompleted(h)?calcAllocatedCost(h):{xeCost:0,luongCost:0,total:0,days:getContractDays(h)};
+    // Chi phí phân bổ từ chi phí xe/tài xế cố định
+    var alloc=calcAllocatedCost(h);
     var chiPhanBo=alloc.total;
     var tongChi=chiTrucTiep+chiPhanBo;
     // Lãi gộp (chỉ trừ chi trực tiếp)
@@ -1696,7 +1697,7 @@ function renderBCHopDong(){
   var tongConLai=rows.reduce(function(s,h){return s+(h.giatri-h.dathu);},0);
 
   document.getElementById('bc-hd-kpi').innerHTML=[
-    {cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tongThu),sub:rows.filter(function(h){return _isCompleted(h);}).length+' HĐ hoàn thành · '+d.lbl},
+    {cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tongThu),sub:rows.length+' HĐ hoàn thành · '+d.lbl},
     {cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Chi trực tiếp',val:fmtM(tongChiTT),sub:'Chi có liên kết HĐ'},
     {cls:'c-purple',ic:'ic-purple',ico:'🔧',lbl:'Chi phí phân bổ',val:fmtM(tongChiPB),sub:'Xe + lương tài xế'},
     {cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận thực',val:fmtM(tongLNThuc),sub:tongThu>0?((tongLNThuc/tongThu*100).toFixed(1)+'% tỷ suất'):''},
