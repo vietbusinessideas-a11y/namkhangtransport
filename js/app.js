@@ -789,7 +789,9 @@ function openHDDetail(id) {
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px">' +
     [['Giá trị',fmtM(h.giatri),'var(--text)'],['Đã thu','+'+fmtM(h.dathu),'var(--green)'],['Còn lại',cn>0?fmtM(cn):'Đã đủ',cn>0?'var(--orange)':'var(--green)']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.65rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace;color:'+p[2]+'">'+p[1]+'</div></div>';}).join('') + '</div>' +
     baoCaoSectionHTML(h.so),
-    '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button><button class="btn btn-accent" onclick="closeModal();openHDModal(\'' + h.id + '\')">✏️ Sửa</button>');
+    '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'
+    +'<button class="btn btn-ghost" style="color:var(--blue);border-color:var(--blue)" onclick="duplicateHD(\''+h.id+'\')">📋 Nhân đôi</button>'
+    +'<button class="btn btn-accent" onclick="closeModal();openHDModal(\''+h.id+'\')">✏️ Sửa</button>');
   // Async load ảnh báo cáo:
   // - Ưu tiên: BC có hd_so khớp với HĐ này
   // - Fallback: BC từ xe đó nhưng chưa gán hd_so (BC cũ trước khi có tính năng liên kết HĐ)
@@ -863,6 +865,62 @@ function openHDModal(id) {
     }
   }
 }
+function duplicateHD(id){
+  if(!requireAdmin()) return;
+  var src=DB.hopDong.find(function(x){return x.id===id;}); if(!src) return;
+  var pt=parseTuyen(src.tuyen);
+  closeModal();
+  setTimeout(function(){
+    // Mở form thêm mới (không truyền id → genHDSo tự động)
+    openHDModal(null);
+    setTimeout(function(){
+      // Điền sẵn dữ liệu từ HĐ gốc
+      var fSo   =document.getElementById('f-so');
+      var fNgay =document.getElementById('f-ngay');
+      var fNgayDi=document.getElementById('f-ngay-di');
+      var fNgayVe=document.getElementById('f-ngay-ve');
+      var fKH   =document.getElementById('f-kh');
+      var fMaKH =document.getElementById('f-ma-kh-hd');
+      var fDi   =document.getElementById('f-diem-di');
+      var fDen  =document.getElementById('f-diem-den');
+      var fXe   =document.getElementById('f-xe');
+      var fTX   =document.getElementById('f-taixe');
+      var fGT   =document.getElementById('f-giatri');
+      var fDaThu=document.getElementById('f-dathu');
+      var fTT   =document.getElementById('f-tt');
+      // Số HĐ: giữ mã tự sinh (đã điền bởi genHDSo trong openHDModal)
+      // Ngày ký: giữ hôm nay (đã điền)
+      // Ngày đi / về: copy từ gốc để user chỉnh
+      if(fNgayDi) fNgayDi.value=src.ngay_di||src.ngay||'';
+      if(fNgayVe) fNgayVe.value=src.ngay_ve||'';
+      // Khách hàng
+      if(fKH) fKH.value=src.kh||'';
+      // Mã KH
+      if(fMaKH){
+        var khObj=DB.khachHang.find(function(k){return k.ten===src.kh;});
+        fMaKH.value=(khObj&&khObj.maKH)?khObj.maKH:'';
+      }
+      // Tuyến đường
+      if(fDi)  fDi.value=pt.di||'';
+      if(fDen) fDen.value=pt.den||'';
+      // Xe + Tài xế
+      if(fXe)  fXe.value=src.xe||'';
+      if(fTX)  fTX.value=src.taixe||'';
+      // Giá trị — copy; Đã thu reset về 0
+      if(fGT)  fGT.value=src.giatri?fmt(src.giatri):'';
+      if(fDaThu) fDaThu.value='0';
+      // Trạng thái reset về Chờ thực hiện
+      if(fTT)  fTT.value='cho_xe';
+      // Cập nhật badge thời lượng
+      updateDurationBadge();
+      // Đổi tiêu đề modal thành nhân đôi
+      var mTitle=document.querySelector('.modal-header h3');
+      if(mTitle) mTitle.textContent='📋 Nhân đôi HĐ '+src.so;
+      toast('📋 Đã copy thông tin từ HĐ '+src.so+' — kiểm tra & chỉnh sửa rồi lưu','info',4000);
+    },80);
+  },150);
+}
+
 function updateDurationBadge(){
   var el = document.getElementById('duration-badge'); if(!el) return;
   var di = (document.getElementById('f-ngay-di')||{}).value || '';
