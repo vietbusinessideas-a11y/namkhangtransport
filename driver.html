@@ -252,14 +252,10 @@
       <!-- Báo cáo nhanh -->
       <div style="font-size:.72rem;font-weight:700;color:#a09c96;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">📝 Báo cáo nhanh</div>
 
-      <!-- Banner cảnh báo khi không có HĐ (ẩn mặc định) -->
+      <!-- Banner thông báo trạng thái HĐ — nội dung do setReportButtons() điền động -->
       <div id="no-hd-banner" style="display:none;align-items:center;gap:10px;
-           background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;
-           padding:12px 14px;margin-bottom:12px;font-size:.78rem;color:#92400e">
-        <span style="font-size:1.2rem">⚠️</span>
-        <span>Bạn chưa có hợp đồng đang thực hiện.<br>
-        <strong>Một số báo cáo bị tạm khóa</strong> cho đến khi có chuyến được giao.</span>
-      </div>
+           border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:.78rem;
+           border:1px solid #fcd34d;background:#fffbeb;color:#92400e"></div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
         <!-- 8 nút báo cáo — data-type để setReportButtons() nhận biết -->
@@ -602,6 +598,14 @@ async function sbGet(table, query){
   return r.json();
 }
 
+async function sbPatch(table, filter, body){
+  if(!SB_URL) throw new Error('offline');
+  var h = Object.assign({}, sbHeaders(), { 'Prefer': 'return=representation' });
+  var r = await fetch(SB_URL+'/rest/v1/'+table+'?'+filter, { method:'PATCH', headers:h, body:JSON.stringify(body) });
+  if(!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
 // ═══════════════════════════════════════
 // GPS
 // ═══════════════════════════════════════
@@ -820,7 +824,7 @@ function populateApp(){
   if(!todayHDs.length) todayHDs = MOCK_HD.filter(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; });
 
   // Gọi ngay với mock data, rồi async Supabase override
-  setReportButtons(todayHDs.length > 0);
+  setReportButtons(todayHDs.length > 0, false);
   renderActiveContracts(todayHDs);
 
   // Async load từ Supabase nếu có
@@ -830,14 +834,37 @@ function populateApp(){
       'select=so_hd,khach_hang,tuyen_duong,ngay_th,trang_thai'
       +'&tai_xe=eq.'+encodeURIComponent(d.ten)
       +'&trang_thai=in.(dang_chay,cho_xe)&limit=10'
-    ).then(function(rows){
-      if(!rows || !rows.length){ setReportButtons(false); return; }
+    ).then(async function(rows){
+      if(!rows || !rows.length){ setReportButtons(false, false); return; }
+
+      // ── Auto-transition: cho_xe có ngay_th <= hôm nay → dang_chay ──────
+      var todayStr = (function(){
+        var n=new Date(); var yy=n.getFullYear();
+        var mm=String(n.getMonth()+1).padStart(2,'0');
+        var dd=String(n.getDate()).padStart(2,'0');
+        return yy+'-'+mm+'-'+dd;
+      })();
+      var toActivate = rows.filter(function(r){
+        return r.trang_thai === 'cho_xe' && r.ngay_th && r.ngay_th <= todayStr;
+      });
+      if(toActivate.length){
+        await Promise.all(toActivate.map(function(r){
+          return sbPatch('hop_dong', 'so_hd=eq.'+encodeURIComponent(r.so_hd), { trang_thai:'dang_chay' })
+            .then(function(){ r.trang_thai = 'dang_chay'; console.log('[NK] Auto-activated:', r.so_hd); })
+            .catch(function(e){ console.warn('[NK] Auto-activate lỗi', r.so_hd, e.message); });
+        }));
+      }
+
       var sbHDs = rows.map(function(r){
         return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, ngay_di:'', ngay_ve:'', tt:r.trang_thai, taixe:d.ten };
       });
-      ACTIVE_HDS = sbHDs;  // ← lưu global để openModal và saveBaoCao dùng
+      ACTIVE_HDS = sbHDs;
       renderActiveContracts(sbHDs);
-      setReportButtons(true);
+
+      var hasDangChay = sbHDs.some(function(h){ return h.tt === 'dang_chay'; });
+      var hasChoXe    = sbHDs.some(function(h){ return h.tt === 'cho_xe'; });
+      setReportButtons(hasDangChay, hasChoXe);
+
       // Thử fetch thêm ngay_di/ngay_ve nếu cột đã tồn tại (optional)
       var ids = rows.map(function(r){ return r.so_hd; }).filter(Boolean);
       if(ids.length){
@@ -852,13 +879,12 @@ function populateApp(){
             var ex = exMap[h.so] || {};
             return Object.assign({}, h, { ngay_di: ex.ngay_di||h.ngay, ngay_ve: ex.ngay_ve||'' });
           });
-          ACTIVE_HDS = updated;  // ← cập nhật lại với đầy đủ ngay_di/ngay_ve
+          ACTIVE_HDS = updated;
           renderActiveContracts(updated);
         }).catch(function(){}); // cột chưa tồn tại → bỏ qua
       }
     }).catch(function(e){
       console.warn('[NK] Lỗi tải hợp đồng Supabase:', e);
-      // Giữ nguyên kết quả mock
     });
   }
 
@@ -866,24 +892,60 @@ function populateApp(){
     if(hdList.length){
       activeCont.innerHTML = hdList.map(function(h, i){
         var isDangChay = h.tt === 'dang_chay';
-        var statusColor = isDangChay ? '#16a34a' : '#d97706';
-        var statusLabel = isDangChay ? 'ĐANG CHẠY' : 'CHỜ THỰC HIỆN';
         var dur = calcDuration(h.ngay_di, h.ngay_ve);
-        return '<div class="card" style="padding:16px 18px;margin-bottom:'+(i<hdList.length-1?'10px':'0')+'">'+
-          '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">'+
-            '<div style="display:flex;align-items:center;gap:6px"><div class="live-dot" style="background:'+statusColor+'"></div><span style="font-size:.72rem;font-weight:700;color:'+statusColor+'">'+statusLabel+'</span></div>'+
-            '<span class="badge-blue">'+h.so+'</span>'+
-          '</div>'+
-          '<div style="font-size:.9rem;font-weight:700;margin-bottom:4px">'+h.kh+'</div>'+
-          '<div style="font-size:.78rem;color:#6b6760;display:flex;align-items:center;gap:4px">'+
-            '<span>📍</span><span>'+h.tuyen+'</span>'+
-          '</div>'+
-          (dur ? '<div style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:rgba(37,99,235,.1);border-radius:20px;font-size:.7rem;font-weight:700;color:#2563eb">🗓 '+dur+'</div>' : '')+
-          '<div style="display:flex;gap:8px;margin-top:12px">'+
-            '<button onclick="openModal(\'hoan_thanh\')" style="flex:1;padding:9px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;font-size:.75rem;font-weight:700;cursor:pointer">✅ Báo hoàn thành</button>'+
-            '<button onclick="openModal(\'su_co\')" style="padding:9px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:.75rem;font-weight:700;cursor:pointer">⚠️ Sự cố</button>'+
-          '</div>'+
-        '</div>';
+        var mb = i < hdList.length-1 ? '10px' : '0';
+
+        if(isDangChay){
+          // ── Card HĐ ĐANG CHẠY (xanh, nút đầy đủ) ──────────────────
+          return '<div class="card" style="padding:16px 18px;margin-bottom:'+mb+'">'+
+            '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">'+
+              '<div style="display:flex;align-items:center;gap:6px">'+
+                '<div class="live-dot" style="background:#16a34a"></div>'+
+                '<span style="font-size:.72rem;font-weight:700;color:#16a34a">ĐANG CHẠY</span>'+
+              '</div>'+
+              '<span class="badge-blue">'+h.so+'</span>'+
+            '</div>'+
+            '<div style="font-size:.9rem;font-weight:700;margin-bottom:4px">'+h.kh+'</div>'+
+            '<div style="font-size:.78rem;color:#6b6760;display:flex;align-items:center;gap:4px">'+
+              '<span>📍</span><span>'+h.tuyen+'</span>'+
+            '</div>'+
+            (dur ? '<div style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:rgba(37,99,235,.1);border-radius:20px;font-size:.7rem;font-weight:700;color:#2563eb">🗓 '+dur+'</div>' : '')+
+            '<div style="display:flex;gap:8px;margin-top:12px">'+
+              '<button onclick="openModal(\'hoan_thanh\')" style="flex:1;padding:9px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;font-size:.75rem;font-weight:700;cursor:pointer">✅ Báo hoàn thành</button>'+
+              '<button onclick="openModal(\'su_co\')" style="padding:9px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:.75rem;font-weight:700;cursor:pointer">⚠️ Sự cố</button>'+
+            '</div>'+
+          '</div>';
+        } else {
+          // ── Card HĐ CHỜ THỰC HIỆN (cam nét đứt, nút mờ/khóa) ─────
+          var ngayKH = h.ngay_di || h.ngay || '';
+          var countdown = '';
+          if(ngayKH){
+            var today = new Date(); today.setHours(0,0,0,0);
+            var dep   = new Date(ngayKH); dep.setHours(0,0,0,0);
+            var diff  = Math.round((dep - today) / 864e5);
+            if(diff > 0)      countdown = 'Còn <strong>'+diff+' ngày</strong> nữa khởi hành';
+            else if(diff === 0) countdown = '<strong>Hôm nay</strong> khởi hành — chờ admin kích hoạt';
+            else               countdown = 'Đã qua ngày — chờ admin cập nhật';
+          }
+          return '<div class="card" style="padding:16px 18px;margin-bottom:'+mb+';border:2px dashed #fb923c;background:#fffbf5">'+
+            '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">'+
+              '<div style="display:flex;align-items:center;gap:6px">'+
+                '<span style="font-size:.85rem">📅</span>'+
+                '<span style="font-size:.72rem;font-weight:700;color:#d97706">CHUYẾN SẮP TỚI</span>'+
+              '</div>'+
+              '<span style="font-size:.68rem;font-weight:700;font-family:\'DM Mono\',monospace;color:#d97706;background:#fff7ed;padding:2px 8px;border-radius:20px;border:1px solid #fed7aa">'+h.so+'</span>'+
+            '</div>'+
+            '<div style="font-size:.9rem;font-weight:700;margin-bottom:4px;color:#1c1917">'+h.kh+'</div>'+
+            '<div style="font-size:.78rem;color:#6b6760;display:flex;align-items:center;gap:4px;margin-bottom:6px">'+
+              '<span>📍</span><span>'+h.tuyen+'</span>'+
+            '</div>'+
+            (countdown ? '<div style="font-size:.76rem;color:#9a3412;background:#ffedd5;border-radius:8px;padding:6px 10px;margin-bottom:10px">⏳ '+countdown+'</div>' : '')+
+            (dur ? '<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:rgba(251,146,60,.12);border-radius:20px;font-size:.7rem;font-weight:700;color:#c2410c;margin-bottom:10px">🗓 '+dur+'</div>' : '')+
+            '<div style="display:flex;gap:8px;align-items:center;padding:8px 10px;background:#fef3c7;border-radius:8px;font-size:.74rem;color:#92400e">'+
+              '<span>🔒</span><span>Báo cáo sẽ mở khi hợp đồng chuyển sang <strong>Đang thực hiện</strong></span>'+
+            '</div>'+
+          '</div>';
+        }
       }).join('');
     } else {
       activeCont.innerHTML='<div class="card" style="padding:20px;text-align:center;color:#a09c96"><div style="font-size:2rem;margin-bottom:6px">📋</div><div style="font-size:.82rem">Chưa có chuyến hôm nay</div></div>';
@@ -1065,23 +1127,44 @@ function calcDuration(ngay_di, ngay_ve){
 // Các loại báo cáo CẦN hợp đồng đang chạy
 var REQUIRES_HD = ['do_dau','km_dau','km_cuoi','hoan_thanh','hop_dong','hanh_khach'];
 
-function setReportButtons(hasHD){
-  HAS_ACTIVE_HD = hasHD;
+function setReportButtons(hasDangChay, hasChoXe){
+  HAS_ACTIVE_HD = !!hasDangChay;
 
   // Cập nhật tất cả nút .rpt-btn
   document.querySelectorAll('.rpt-btn').forEach(function(btn){
     var type = btn.getAttribute('data-type');
     var needHD = REQUIRES_HD.indexOf(type) >= 0;
-    var disabled = needHD && !hasHD;
+    var disabled = needHD && !hasDangChay;
     btn.disabled = disabled;
     btn.style.opacity = disabled ? '0.38' : '1';
     btn.style.cursor  = disabled ? 'not-allowed' : 'pointer';
     btn.style.filter  = disabled ? 'grayscale(60%)' : '';
   });
 
-  // Banner thông báo
+  // Banner thông báo — 3 trạng thái
   var banner = document.getElementById('no-hd-banner');
-  if(banner) banner.style.display = hasHD ? 'none' : 'flex';
+  if(!banner) return;
+  if(hasDangChay){
+    banner.style.display = 'none';
+  } else if(hasChoXe){
+    // Có HĐ chờ thực hiện nhưng chưa đến ngày
+    banner.style.display = 'flex';
+    banner.style.background = '#fff7ed';
+    banner.style.borderColor = '#fb923c';
+    banner.style.color = '#9a3412';
+    banner.innerHTML = '<span style="font-size:1.2rem">📅</span>'
+      + '<span>Bạn có chuyến sắp tới đang chờ.<br>'
+      + '<strong>Báo cáo sẽ mở khi đến ngày khởi hành.</strong></span>';
+  } else {
+    // Không có HĐ nào
+    banner.style.display = 'flex';
+    banner.style.background = '#fffbeb';
+    banner.style.borderColor = '#fcd34d';
+    banner.style.color = '#92400e';
+    banner.innerHTML = '<span style="font-size:1.2rem">⚠️</span>'
+      + '<span>Bạn chưa có hợp đồng đang thực hiện.<br>'
+      + '<strong>Một số báo cáo bị tạm khóa</strong> cho đến khi có chuyến được giao.</span>';
+  }
 }
 
 // ═══════════════════════════════════════
