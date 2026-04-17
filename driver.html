@@ -889,11 +889,18 @@ function populateApp(){
   }
 
   function renderActiveContracts(hdList){
-    if(hdList.length){
-      activeCont.innerHTML = hdList.map(function(h, i){
+    // Nếu đang có HĐ dang_chay → chỉ hiện dang_chay, ẩn cho_xe
+    // Nếu không có dang_chay nào → hiện cho_xe (locked) để tài xế biết chuyến sắp tới
+    var hasDangChay = hdList.some(function(h){ return h.tt === 'dang_chay'; });
+    var displayList = hasDangChay
+      ? hdList.filter(function(h){ return h.tt === 'dang_chay'; })
+      : hdList;
+
+    if(displayList.length){
+      activeCont.innerHTML = displayList.map(function(h, i){
         var isDangChay = h.tt === 'dang_chay';
         var dur = calcDuration(h.ngay_di, h.ngay_ve);
-        var mb = i < hdList.length-1 ? '10px' : '0';
+        var mb = i < displayList.length-1 ? '10px' : '0';
 
         if(isDangChay){
           // ── Card HĐ ĐANG CHẠY (xanh, nút đầy đủ) ──────────────────
