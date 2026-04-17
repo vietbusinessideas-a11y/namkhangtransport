@@ -1396,11 +1396,18 @@ function chotLuongThang(){
       rows.forEach(function(r){
         var disabled=r.daCoPhieu;
         tableHTML+='<tr style="'+(disabled?'opacity:.5':'')+'"><td>'
-          +'<input type="checkbox" class="luong-chk" data-id="'+r.tx.id+'" data-ten="'+r.tx.ten+'" data-luong="'+r.tx.luong+'" '
-          +(!disabled?'checked':'')+' '+(disabled?'disabled':'')+'>'
+          +'<input type="checkbox" class="luong-chk" data-ten="'+r.tx.ten+'" '
+          +(!disabled?'checked':'')+' '+(disabled?'disabled':'')
+          +' onchange="chotLuongUpdateTotal()">'
           +'</td>'
           +'<td style="font-weight:500">'+r.tx.ten+'</td>'
-          +'<td style="text-align:right;font-family:\'DM Mono\',monospace">'+fmt(r.tx.luong)+' ₫</td>'
+          +'<td>'+(disabled
+            ?'<span style="font-family:\'DM Mono\',monospace;font-size:.78rem">'+fmt(r.tx.luong)+' ₫</span>'
+            :'<input type="text" inputmode="numeric" class="fc luong-amt" data-ten="'+r.tx.ten+'"'
+              +' value="'+fmt(r.tx.luong)+'"'
+              +' style="padding:4px 8px;font-size:.78rem;font-family:\'DM Mono\',monospace;text-align:right;width:130px"'
+              +' oninput="fmtInput(this);chotLuongUpdateTotal()">')
+          +'</td>'
           +'<td>'+(disabled
             ?'<span style="font-size:.68rem;background:var(--surface2);color:var(--text3);padding:2px 7px;border-radius:4px">✓ Đã phát sinh</span>'
             :'<span style="font-size:.68rem;background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:4px">Chưa phát sinh</span>')
@@ -1430,6 +1437,17 @@ function chotLuongThang(){
   window.chotLuongThangRefresh=function(v){_openModal(v);};
 }
 
+function chotLuongUpdateTotal(){
+  var total=0;
+  document.querySelectorAll('.luong-chk:checked:not(:disabled)').forEach(function(chk){
+    var ten=chk.dataset.ten;
+    var inp=document.querySelector('.luong-amt[data-ten="'+ten+'"]');
+    if(inp){var v=parseInt((inp.value||'').replace(/[.,\s]/g,''))||0;total+=v;}
+  });
+  var btn=document.querySelector('#mainModal .btn-green');
+  var count=document.querySelectorAll('.luong-chk:checked:not(:disabled)').length;
+  if(btn){btn.textContent='💰 Tạo '+count+' phiếu · '+fmtM(total);}
+}
 function chotLuongConfirm(selMonth){
   var checkboxes=document.querySelectorAll('.luong-chk:checked:not(:disabled)');
   if(!checkboxes.length){toast('Không có tài xế nào được chọn','error');return;}
@@ -1440,10 +1458,15 @@ function chotLuongConfirm(selMonth){
   var ym=String(m).padStart(2,'0')+'/'+y;
   var moTaThang='Tháng '+m+'/'+y;
 
+  // Đọc số tiền từ input (cho phép người dùng đã sửa)
   var tasks=[];
   checkboxes.forEach(function(chk){
-    tasks.push({ten:chk.dataset.ten,luong:parseInt(chk.dataset.luong)||0});
+    var ten=chk.dataset.ten;
+    var inp=document.querySelector('.luong-amt[data-ten="'+ten+'"]');
+    var luong=inp?parseInt((inp.value||'').replace(/[.,\s]/g,''))||0:0;
+    if(luong>0)tasks.push({ten:ten,luong:luong});
   });
+  if(!tasks.length){toast('Số tiền lương không hợp lệ','error');return;}
 
   closeModal();
   toast('⏳ Đang tạo '+tasks.length+' phiếu chi lương...','info',2000);
