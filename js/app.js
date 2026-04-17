@@ -1180,7 +1180,10 @@ var _tcModalType='thu'; // lưu type để tcFilterHDByKH biết mode
 function openTCModal(type){
   _tcModalType=type;
   var isThu=type==='thu';
-  var loaiOpts=isThu?'<option>Thu hợp đồng</option><option>Đặt cọc</option><option>Thu khác</option>':'<option>Nhiên liệu</option><option>Lương tài xế</option><option>Sửa chữa</option><option>Cầu đường</option><option>Bảo dưỡng</option><option>Khác</option>';
+  var loaiOpts=isThu
+    ?'<option>Thu hợp đồng</option><option>Đặt cọc</option><option>Thu khác</option>'
+    :'<optgroup label="Chi phí hợp đồng"><option>Nhiên liệu</option><option>Cầu đường</option><option>Chi khác</option></optgroup>'
+     +'<optgroup label="Chi phí xe (không theo HĐ)"><option>Lương tài xế</option><option>Bảo dưỡng</option><option>Sửa chữa</option><option>Đăng kiểm</option><option>Bảo hiểm</option><option>Định vị</option><option>Phù hiệu</option></optgroup>';
   var xeOpts='<option value="">—</option>'+DB.xe.map(function(x){return'<option value="'+x.bien+'">'+x.bien+'</option>';}).join('');
   var txOpts='<option value="">—</option>'+DB.taiXe.map(function(t){return'<option value="'+t.ten+'">'+t.ten+'</option>';}).join('');
   var today=new Date().toISOString().slice(0,10);var timeNow=new Date().toTimeString().slice(0,5);
@@ -1195,33 +1198,73 @@ function openTCModal(type){
 
   // Cả Thu và Chi đều có autocomplete KH + oninput lọc HĐ
   var khLabel=isThu?'Khách hàng':'Đối tác / Khách hàng';
-  var khField='<div class="fg"><label class="fl">'+khLabel+'</label>'+khDatalist
+  var khField='<div class="fg" id="tc-fg-kh"><label class="fl">'+khLabel+'</label>'+khDatalist
     +'<input class="fc" id="f-kh" list="tc-kh-list" placeholder="Gõ tên hoặc mã KH để gợi ý..." oninput="tcFilterHDByKH()" autocomplete="off"></div>';
 
   var hdLabel=isThu
     ?'Hợp đồng liên kết <span style="font-size:.67rem;font-weight:400;color:var(--orange);margin-left:4px">★ chỉ HĐ còn công nợ</span>'
     :'Hợp đồng liên kết <span style="font-size:.67rem;font-weight:400;color:var(--text3);margin-left:4px">Lọc theo KH đã chọn</span>';
-  var hdOnChange=' onchange="tcOnHDChange()"'; // cả 2 loại đều auto-fill xe/tài xế
+
+  var loaiOnChange=isThu?'':'onchange="tcOnLoaiChange()"';
 
   showModal(isThu?'💰 Ghi nhận Thu':'💸 Ghi nhận Chi','',
-    '<div class="fg"><label class="fl">Loại <span class="req">*</span></label><select class="fc" id="f-loai">'+loaiOpts+'</select></div>'
+    '<div class="fg"><label class="fl">Loại <span class="req">*</span></label><select class="fc" id="f-loai" '+loaiOnChange+'>'+loaiOpts+'</select></div>'
     +'<div class="form-row"><div class="fg"><label class="fl">Ngày <span class="req">*</span></label><input type="date" class="fc" id="f-ngay" value="'+today+'"></div><div class="fg"><label class="fl">Giờ</label><input type="time" class="fc" id="f-gio" value="'+timeNow+'"></div></div>'
     +'<div class="fg"><label class="fl">Số tiền (VNĐ) <span class="req">*</span></label><input type="text" inputmode="numeric" class="fc" id="f-sotien" placeholder="0" oninput="fmtInput(this)"></div>'
     +khField
-    +'<div class="form-row">'
-      +'<div class="fg"><label class="fl">'+hdLabel+'</label>'
-        +'<select class="fc" id="f-hd"'+hdOnChange+'>'+hdInitOpts+'</select>'
+    +'<div class="form-row" id="tc-fg-hd-row">'
+      +'<div class="fg" id="tc-fg-hd"><label class="fl">'+hdLabel+'</label>'
+        +'<select class="fc" id="f-hd" onchange="tcOnHDChange()">'+hdInitOpts+'</select>'
         +'<div id="tc-hd-info" style="display:none;margin-top:6px;padding:8px 10px;background:var(--surface2);border-radius:6px;font-size:.72rem;line-height:1.6"></div>'
       +'</div>'
       +'<div class="fg"><label class="fl">Hình thức TT</label><select class="fc" id="f-httt"><option>Chuyển khoản</option><option>Tiền mặt</option></select></div>'
     +'</div>'
+    +(isThu?'':'<div id="tc-xe-hint" style="display:none;margin:-6px 0 8px;padding:8px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:7px;font-size:.76rem;color:#166534">🔧 Chi phí này gắn theo xe, không cần điền hợp đồng hay khách hàng.</div>')
     +'<div class="form-row">'
-      +'<div class="fg"><label class="fl">Xe</label><select class="fc" id="f-xe" onchange="tcCheckXeMatch()">'+xeOpts+'</select></div>'
-      +'<div class="fg"><label class="fl">Tài xế</label><select class="fc" id="f-taixe" onchange="tcCheckXeMatch()">'+txOpts+'</select></div>'
+      +'<div class="fg"><label class="fl">Xe'+(isThu?'':'<span id="tc-xe-req-star" style="display:none" class="req"> *</span>')+'</label><select class="fc" id="f-xe" onchange="tcCheckXeMatch()">'+xeOpts+'</select></div>'
+      +'<div class="fg" id="tc-fg-taixe"><label class="fl">Tài xế</label><select class="fc" id="f-taixe" onchange="tcCheckXeMatch()">'+txOpts+'</select></div>'
     +'</div>'
     +'<div id="tc-xe-warn" style="display:none;margin:-4px 0 8px;padding:9px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:7px;font-size:.76rem;color:#92400e">⚠️ Xe và tài xế đang chọn không khớp với hợp đồng này, cần xem lại!</div>'
     +'<div class="fg"><label class="fl">Mô tả</label><textarea class="fc" id="f-mota" rows="2" style="resize:vertical"></textarea></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn" style="background:'+(isThu?'var(--green)':'var(--red)')+';color:#fff" onclick="saveTC(\''+type+'\')">💾 Lưu</button>');
+}
+// Danh sách loại chi phí xe — không liên quan đến HĐ/KH
+var TC_XE_COSTS=['Lương tài xế','Bảo dưỡng','Sửa chữa','Đăng kiểm','Bảo hiểm','Định vị','Phù hiệu'];
+function tcOnLoaiChange(){
+  var loai=(document.getElementById('f-loai')||{}).value||'';
+  var isXeCost=TC_XE_COSTS.indexOf(loai)>-1;
+  var isLuong=loai==='Lương tài xế';
+
+  // KH field: mờ nếu chi phí xe
+  var fgKH=document.getElementById('tc-fg-kh');
+  var fgHD=document.getElementById('tc-fg-hd');
+  var fgHDRow=document.getElementById('tc-fg-hd-row');
+  var hint=document.getElementById('tc-xe-hint');
+  var xeStar=document.getElementById('tc-xe-req-star');
+  var fgTX=document.getElementById('tc-fg-taixe');
+
+  function setDim(el,dim){if(!el)return;el.style.opacity=dim?'0.35':'';el.style.pointerEvents=dim?'none':'';if(el.querySelector('input'))el.querySelector('input').disabled=dim;if(el.querySelector('select'))el.querySelector('select').disabled=dim;}
+
+  if(isXeCost){
+    setDim(fgKH,true);
+    setDim(fgHD,true);
+    // Xóa giá trị KH và HĐ để không lưu nhầm
+    var khEl=document.getElementById('f-kh');if(khEl){khEl.value='';}
+    var hdEl=document.getElementById('f-hd');if(hdEl){hdEl.value='';}
+    var hdInfo=document.getElementById('tc-hd-info');if(hdInfo)hdInfo.style.display='none';
+    var warn=document.getElementById('tc-xe-warn');if(warn)warn.style.display='none';
+    if(hint)hint.style.display='';
+    if(xeStar)xeStar.style.display='';
+    // Tài xế: hiện bình thường cho Lương tài xế, mờ cho còn lại
+    setDim(fgTX,!isLuong);
+    if(!isLuong){var txEl=document.getElementById('f-taixe');if(txEl)txEl.value='';}
+  } else {
+    setDim(fgKH,false);
+    setDim(fgHD,false);
+    setDim(fgTX,false);
+    if(hint)hint.style.display='none';
+    if(xeStar)xeStar.style.display='none';
+  }
 }
 function tcFilterHDByKH(){
   var q=(document.getElementById('f-kh').value||'').trim().toLowerCase();
@@ -1292,6 +1335,12 @@ function saveTC(type){
   var raw=document.getElementById('f-sotien').value.replace(/[.,\s]/g,'');
   var sotien=parseInt(raw);
   if(!sotien||sotien<=0){toast('Nhập số tiền hợp lệ!','error');return;}
+  // Validate: chi phí xe bắt buộc phải chọn xe
+  var loai=document.getElementById('f-loai').value;
+  if(type==='chi'&&TC_XE_COSTS.indexOf(loai)>-1){
+    var xeVal=(document.getElementById('f-xe')||{}).value||'';
+    if(!xeVal){toast('⚠️ Chi phí <strong>'+loai+'</strong> cần chọn số xe!','error',4000);return;}
+  }
   var hdId=document.getElementById('f-hd').value||null;
   var hdSo='';if(hdId){var foundHD=DB.hopDong.find(function(h){return h.id===hdId;});hdSo=foundHD?foundHD.so:'';}
   var obj={id:uid(),type:type,loai:document.getElementById('f-loai').value,ngay:document.getElementById('f-ngay').value,gio:document.getElementById('f-gio').value,sotien:sotien,hd:hdSo,hd_id:hdId,httt:document.getElementById('f-httt').value,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,kh:document.getElementById('f-kh').value,mota:document.getElementById('f-mota').value};
