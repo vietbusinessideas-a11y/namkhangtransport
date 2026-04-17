@@ -143,13 +143,14 @@ body{font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--text);min
   .detail-grid{grid-template-columns:1fr}
   .chart-row{grid-template-columns:1fr}
 
-  /* Bảng mobile: ẩn cột phụ, giữ cột quan trọng */
+  /* Bảng HĐ mobile: ẩn cột phụ đồng thời ở THEAD và TBODY */
+  /* Cột 3=Tuyến, 4=Ngày, 5=Xe/Tài xế */
+  #page-hopdong .dt thead tr th:nth-child(3),
+  #page-hopdong .dt thead tr th:nth-child(4),
+  #page-hopdong .dt thead tr th:nth-child(5),
   #hd-body tr td:nth-child(3),
   #hd-body tr td:nth-child(4),
   #hd-body tr td:nth-child(5){display:none}
-  #hd-body tr th:nth-child(3),
-  #hd-body tr th:nth-child(4),
-  #hd-body tr th:nth-child(5){display:none}
 
   #tc-body tr td:nth-child(4),
   #tc-body tr td:nth-child(5){display:none}
