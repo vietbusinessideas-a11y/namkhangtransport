@@ -831,14 +831,14 @@ function populateApp(){
   // Dùng 2 bước: 1) detect contract (không cần cột mới), 2) fetch ngay_di/ngay_ve nếu cột tồn tại
   if(SB_URL && SB_KEY){
     sbGet('hop_dong',
-      'select=so_hd,khach_hang,tuyen_duong,ngay_th,trang_thai'
+      'select=so_hd,khach_hang,tuyen_duong,ngay_th,ngay_di,ngay_ve,trang_thai'
       +'&tai_xe=eq.'+encodeURIComponent(d.ten)
       +'&trang_thai=in.(dang_chay,cho_xe)&limit=10'
     ).then(async function(rows){
       if(!rows || !rows.length){ setReportButtons(false, false); return; }
 
-      // ── Auto-transition: cho_xe có ngay_th <= hôm nay → dang_chay ──────
-      // Điều kiện: chỉ kích hoạt nếu tài xế CHƯA có HĐ dang_chay nào
+      // ── Auto-transition: cho_xe → dang_chay CHỈ khi ngày khởi hành đã đến ──
+      // Dùng ngay_di (ngày khởi hành thực tế); fallback ngay_th nếu chưa có
       var todayStr = (function(){
         var n=new Date(); var yy=n.getFullYear();
         var mm=String(n.getMonth()+1).padStart(2,'0');
@@ -847,7 +847,8 @@ function populateApp(){
       })();
       var alreadyRunning = rows.some(function(r){ return r.trang_thai === 'dang_chay'; });
       var toActivate = alreadyRunning ? [] : rows.filter(function(r){
-        return r.trang_thai === 'cho_xe' && r.ngay_th && r.ngay_th <= todayStr;
+        var startDate = r.ngay_di || r.ngay_th; // ưu tiên ngày khởi hành thực tế
+        return r.trang_thai === 'cho_xe' && startDate && startDate <= todayStr;
       });
       if(toActivate.length){
         await Promise.all(toActivate.map(function(r){
@@ -858,7 +859,7 @@ function populateApp(){
       }
 
       var sbHDs = rows.map(function(r){
-        return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, ngay_di:'', ngay_ve:'', tt:r.trang_thai, taixe:d.ten };
+        return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, ngay_di:r.ngay_di||'', ngay_ve:r.ngay_ve||'', tt:r.trang_thai, taixe:d.ten };
       });
       ACTIVE_HDS = sbHDs;
       renderActiveContracts(sbHDs);
@@ -867,24 +868,7 @@ function populateApp(){
       var hasChoXe    = sbHDs.some(function(h){ return h.tt === 'cho_xe'; });
       setReportButtons(hasDangChay, hasChoXe);
 
-      // Thử fetch thêm ngay_di/ngay_ve nếu cột đã tồn tại (optional)
-      var ids = rows.map(function(r){ return r.so_hd; }).filter(Boolean);
-      if(ids.length){
-        sbGet('hop_dong',
-          'select=so_hd,ngay_di,ngay_ve'
-          +'&so_hd=in.('+ids.map(encodeURIComponent).join(',')+')'
-        ).then(function(extras){
-          if(!extras||!extras.length) return;
-          var exMap = {};
-          extras.forEach(function(e){ exMap[e.so_hd] = e; });
-          var updated = sbHDs.map(function(h){
-            var ex = exMap[h.so] || {};
-            return Object.assign({}, h, { ngay_di: ex.ngay_di||h.ngay, ngay_ve: ex.ngay_ve||'' });
-          });
-          ACTIVE_HDS = updated;
-          renderActiveContracts(updated);
-        }).catch(function(){}); // cột chưa tồn tại → bỏ qua
-      }
+      // ngay_di/ngay_ve đã được fetch trong query đầu → không cần query riêng nữa
     }).catch(function(e){
       console.warn('[NK] Lỗi tải hợp đồng Supabase:', e);
     });
