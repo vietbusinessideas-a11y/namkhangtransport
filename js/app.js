@@ -258,6 +258,28 @@ function hdCuaKH(k) {
   return DB.hopDong.filter(function(h){ return h.kh === k.ten; });
 }
 
+// ── Tự động chuyển CHỜ THỰC HIỆN → ĐANG CHẠY khi đến ngày khởi hành ──────────
+function autoTransitionHD(){
+  var todayStr=new Date().toISOString().slice(0,10);
+  var toActivate=DB.hopDong.filter(function(h){
+    var startDate=h.ngay_di||h.ngay; // ưu tiên ngày_di, fallback ngày_th
+    return h.tt==='cho_xe' && startDate && startDate<=todayStr;
+  });
+  if(!toActivate.length) return Promise.resolve();
+  var patches=toActivate.map(function(h){
+    return sbPatch('hop_dong',h.id,{trang_thai:'dang_chay'}).then(function(){
+      h.tt='dang_chay';
+    }).catch(function(err){
+      console.warn('[NK] autoTransition lỗi HD',h.so,':',err.message);
+    });
+  });
+  return Promise.all(patches).then(function(){
+    var n=toActivate.length;
+    console.log('[NK] autoTransition: đã chuyển',n,'HĐ → dang_chay');
+    if(n) toast('🚌 '+n+' hợp đồng tự động chuyển sang Đang chạy','info');
+  });
+}
+
 function loadDB(){
   DB={hopDong:DEFAULT_HD.slice(),thuChi:DEFAULT_TC.slice(),xe:DEFAULT_XE.slice(),taiXe:DEFAULT_TX.slice(),khachHang:DEFAULT_KH.slice()};
   updateBadges();
@@ -278,8 +300,10 @@ function loadDB(){
     if(tx.length) DB.taiXe=tx.map(mapTX);
     if(kh.length) DB.khachHang=kh.map(mapKH);
     toast('☁️ Dữ liệu từ Supabase','success');
-    updateBadges();
-    renderCurrentPage();
+    autoTransitionHD().then(function(){
+      updateBadges();
+      renderCurrentPage();
+    });
   }).catch(function(err){
     console.error('SB ERR:',err.message);
     toast('📦 Dùng dữ liệu mẫu ('+err.message+')','info');
