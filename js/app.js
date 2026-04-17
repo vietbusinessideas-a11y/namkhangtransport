@@ -1355,6 +1355,56 @@ function deleteTC(id){sbDel('thu_chi',id).then(function(){DB.thuChi=DB.thuChi.fi
 // ═══════════════════════════════════════
 // BÁO CÁO
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+// PHÂN BỔ CHI PHÍ CỐ ĐỊNH VÀO HỢP ĐỒNG
+// ═══════════════════════════════════════
+// Danh sách chi phí xe không liên quan HĐ (đã khai báo ở openTCModal)
+// TC_XE_COSTS = ['Lương tài xế','Bảo dưỡng','Sửa chữa','Đăng kiểm','Bảo hiểm','Định vị','Phù hiệu']
+var TC_XE_LOAI = ['Bảo dưỡng','Sửa chữa','Đăng kiểm','Bảo hiểm','Định vị','Phù hiệu']; // chi phí xe thuần
+var TC_TX_LOAI = ['Lương tài xế']; // chi phí tài xế
+
+// Số ngày thực hiện hợp đồng (tối thiểu 1)
+function getContractDays(h){
+  var from=h.ngay_di||h.ngay||'';
+  var to=h.ngay_ve||h.ngay_di||h.ngay||'';
+  if(!from)return 1;
+  var diff=Math.round((new Date(to)-new Date(from))/864e5)+1;
+  return Math.max(1,diff);
+}
+
+// Tính chi phí phân bổ cho 1 hợp đồng
+function calcAllocatedCost(h){
+  var ym=getMY(h.ngay_di||h.ngay||'');
+  if(!ym||(!h.xe&&!h.taixe))return{xeCost:0,luongCost:0,total:0,ym:ym};
+  var days=getContractDays(h);
+
+  // ── Chi phí xe cố định (Bảo dưỡng, Sửa chữa, Đăng kiểm...) ──
+  var xeFixedTotal=h.xe?DB.thuChi.filter(function(t){
+    return t.type==='chi'&&t.xe===h.xe&&getMY(t.ngay)===ym&&TC_XE_LOAI.indexOf(t.loai)>-1;
+  }).reduce(function(s,t){return s+t.sotien;},0):0;
+
+  // Tổng số ngày xe này có HĐ trong tháng (để tính mẫu số)
+  var xeTotalDays=h.xe?DB.hopDong.filter(function(hh){
+    return hh.xe===h.xe&&getMY(hh.ngay_di||hh.ngay||'')===ym;
+  }).reduce(function(s,hh){return s+getContractDays(hh);},0):0;
+
+  var xeCost=(xeTotalDays>0&&xeFixedTotal>0)?Math.round(xeFixedTotal*days/xeTotalDays):0;
+
+  // ── Lương tài xế ──
+  var luongTotal=h.taixe?DB.thuChi.filter(function(t){
+    return t.type==='chi'&&t.taixe===h.taixe&&getMY(t.ngay)===ym&&TC_TX_LOAI.indexOf(t.loai)>-1;
+  }).reduce(function(s,t){return s+t.sotien;},0):0;
+
+  // Tổng số ngày tài xế này có HĐ trong tháng
+  var txTotalDays=h.taixe?DB.hopDong.filter(function(hh){
+    return hh.taixe===h.taixe&&getMY(hh.ngay_di||hh.ngay||'')===ym;
+  }).reduce(function(s,hh){return s+getContractDays(hh);},0):0;
+
+  var luongCost=(txTotalDays>0&&luongTotal>0)?Math.round(luongTotal*days/txTotalDays):0;
+
+  return{xeCost:xeCost,luongCost:luongCost,total:xeCost+luongCost,ym:ym,days:days};
+}
+
 var bcTab='tongquan';
 var bcPeriod='thang';
 function switchBCTab(t,el){bcTab=t;document.querySelectorAll('#page-baocao .tab').forEach(function(b){b.classList.remove('active');});el.classList.add('active');['tongquan','hopdong','xe','taixe'].forEach(function(p){var panel=document.getElementById('bc-panel-'+p);if(panel)panel.style.display=t===p?'':'none';});if(t==='hopdong')renderBCHopDong();if(t==='xe')renderBCXe();if(t==='taixe')renderBCTaiXe();}
@@ -1363,20 +1413,62 @@ function renderBCHopDong(){
   var tt=document.getElementById('bc-hd-tt').value;
   var sort=document.getElementById('bc-hd-sort').value;
   var rows=DB.hopDong.map(function(h){
+    // Chi trực tiếp: phiếu chi có liên kết HĐ
     var chiTrucTiep=DB.thuChi.filter(function(t){return t.type==='chi'&&t.hd_id===h.id;}).reduce(function(s,t){return s+t.sotien;},0);
-    var chiGianTiep=DB.thuChi.filter(function(t){return t.type==='chi'&&!t.hd_id&&((h.xe&&t.xe&&t.xe===h.xe)||(h.taixe&&t.taixe&&t.taixe===h.taixe));}).reduce(function(s,t){return s+t.sotien;},0);
-    var tongChi=chiTrucTiep+chiGianTiep;var doanhThu=h.giatri;var ln=doanhThu-tongChi;var ts=doanhThu>0?Math.round(ln/doanhThu*100):0;
-    return Object.assign({},h,{chiTrucTiep:chiTrucTiep,chiGianTiep:chiGianTiep,chiHD:tongChi,doanhThu:doanhThu,ln:ln,ts:ts});
-  }).filter(function(h){return(!q||[h.so,h.kh,h.tuyen].join(' ').toLowerCase().includes(q))&&(!tt||h.tt===tt);}).sort(function(a,b){if(sort==='ln_desc')return b.ln-a.ln;if(sort==='ln_asc')return a.ln-b.ln;if(sort==='gt_desc')return b.giatri-a.giatri;return b.ngay.localeCompare(a.ngay);});
+    // Chi phí phân bổ từ chi phí xe/tài xế cố định
+    var alloc=calcAllocatedCost(h);
+    var chiPhanBo=alloc.total;
+    var tongChi=chiTrucTiep+chiPhanBo;
+    var doanhThu=h.giatri;
+    // Lãi gộp (chỉ trừ chi trực tiếp)
+    var laiGop=doanhThu-chiTrucTiep;
+    var tsGop=doanhThu>0?Math.round(laiGop/doanhThu*100):0;
+    // Lợi nhuận thực (trừ cả phân bổ)
+    var lnThuc=doanhThu-tongChi;
+    var tsThuc=doanhThu>0?Math.round(lnThuc/doanhThu*100):0;
+    return Object.assign({},h,{chiTrucTiep:chiTrucTiep,chiPhanBo:chiPhanBo,chiXe:alloc.xeCost,chiLuong:alloc.luongCost,tongChi:tongChi,doanhThu:doanhThu,laiGop:laiGop,tsGop:tsGop,ln:lnThuc,ts:tsThuc,days:alloc.days||1});
+  }).filter(function(h){return(!q||[h.so,h.kh,h.tuyen].join(' ').toLowerCase().includes(q))&&(!tt||h.tt===tt);})
+    .sort(function(a,b){if(sort==='ln_desc')return b.ln-a.ln;if(sort==='ln_asc')return a.ln-b.ln;if(sort==='gt_desc')return b.giatri-a.giatri;return b.ngay.localeCompare(a.ngay);});
+
   var tongThu=rows.reduce(function(s,h){return s+h.doanhThu;},0);
-  var tongChi=rows.reduce(function(s,h){return s+h.chiHD;},0);
-  var tongLN=tongThu-tongChi;
-  var tongGT=rows.reduce(function(s,h){return s+h.giatri;},0);
-  var tongConLai=tongGT-tongThu;
-  document.getElementById('bc-hd-kpi').innerHTML=[{cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Tổng đã thu',val:fmtM(tongThu),sub:rows.length+' hợp đồng'},{cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Tổng chi phí HĐ',val:fmtM(tongChi),sub:'Chi có liên kết HĐ'},{cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận HĐ',val:fmtM(tongLN),sub:tongThu>0?((tongLN/tongThu*100).toFixed(1)+'% tỷ suất'):''},{cls:'c-orange',ic:'ic-orange',ico:'⏳',lbl:'Công nợ còn lại',val:fmtM(tongConLai),sub:'Chưa thu'}].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':c.cls==='c-blue'?'accent':'orange';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
+  var tongChiTT=rows.reduce(function(s,h){return s+h.chiTrucTiep;},0);
+  var tongChiPB=rows.reduce(function(s,h){return s+h.chiPhanBo;},0);
+  var tongLNThuc=rows.reduce(function(s,h){return s+h.ln;},0);
+  var tongConLai=rows.reduce(function(s,h){return s+(h.giatri-h.dathu);},0);
+
+  document.getElementById('bc-hd-kpi').innerHTML=[
+    {cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tongThu),sub:rows.length+' hợp đồng'},
+    {cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Chi trực tiếp',val:fmtM(tongChiTT),sub:'Chi có liên kết HĐ'},
+    {cls:'c-purple',ic:'ic-purple',ico:'🔧',lbl:'Chi phí phân bổ',val:fmtM(tongChiPB),sub:'Xe + lương tài xế'},
+    {cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận thực',val:fmtM(tongLNThuc),sub:tongThu>0?((tongLNThuc/tongThu*100).toFixed(1)+'% tỷ suất'):''},
+  ].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':c.cls==='c-blue'?'accent':c.cls==='c-purple'?'purple':'orange';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
+
   document.getElementById('bc-hd-count').textContent=rows.length+' hợp đồng';
-  document.getElementById('bc-hd-summary').innerHTML='<span style="color:var(--green)">↑ '+fmtM(tongThu)+'</span><span style="color:var(--border)">|</span><span style="color:var(--red)">↓ '+fmtM(tongChi)+'</span><span style="color:var(--border)">|</span><span style="color:var(--accent);font-weight:700">= '+fmtM(tongLN)+'</span>';
-  document.getElementById('bc-hd-body').innerHTML=rows.length?rows.map(function(h){var tsColor=h.ts>=30?'var(--green)':h.ts>=15?'var(--accent)':h.ts>=0?'var(--orange)':'var(--red)';var barW=Math.min(100,Math.max(0,h.ts));return'<tr onclick="openHDDetail(\''+h.id+'\')" style="cursor:pointer"><td><span class="mono" style="font-weight:600">'+h.so+'</span></td><td style="font-weight:500">'+h.kh+'</td><td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td><td><span class="mono">'+fmtD(h.ngay)+'</span></td><td><span class="amt-pos">+'+fmt(h.doanhThu)+'</span>'+(h.dathu<h.giatri?'<div style="font-size:.67rem;color:var(--orange)">Đã thu: '+fmtM(h.dathu)+'</div>':'<div style="font-size:.67rem;color:var(--green)">Đã thu đủ</div>')+'</td><td>'+(h.chiHD>0?'<span class="amt-neg">-'+fmt(h.chiHD)+'</span><div style="font-size:.67rem;color:var(--text3)">TT: '+fmtM(h.chiTrucTiep)+' · GT: '+fmtM(h.chiGianTiep)+'</div>':'<span style="color:var(--text3)">—</span>')+'</td><td><span style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+(h.ln>=0?'+':'')+fmt(h.ln)+'</span></td><td><div style="display:flex;align-items:center;gap:6px"><div style="width:50px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+tsColor+';border-radius:3px"></div></div><span style="font-size:.72rem;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+h.ts+'%</span></div></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join(''):'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Không có hợp đồng nào</td></tr>';
+  document.getElementById('bc-hd-summary').innerHTML=
+    '<span style="color:var(--green)">↑ '+fmtM(tongThu)+'</span>'
+    +'<span style="color:var(--border)">|</span>'
+    +'<span style="color:var(--red)">↓ '+fmtM(tongChiTT+tongChiPB)+'</span>'
+    +'<span style="color:var(--border)">|</span>'
+    +'<span style="color:var(--accent);font-weight:700">= '+fmtM(tongLNThuc)+'</span>';
+
+  document.getElementById('bc-hd-body').innerHTML=rows.length?rows.map(function(h){
+    var tsColor=h.ts>=30?'var(--green)':h.ts>=15?'var(--accent)':h.ts>=0?'var(--orange)':'var(--red)';
+    var gopColor=h.tsGop>=40?'var(--green)':h.tsGop>=20?'var(--accent)':'var(--orange)';
+    var barW=Math.min(100,Math.max(0,h.ts));
+    var phanBoTip=h.chiPhanBo>0?'Xe: '+fmtM(h.chiXe)+' · Lương: '+fmtM(h.chiLuong):'—';
+    return'<tr onclick="openHDDetail(\''+h.id+'\')" style="cursor:pointer">'
+      +'<td><span class="mono" style="font-weight:600">'+h.so+'</span><div style="font-size:.65rem;color:var(--text3)">'+h.days+'N</div></td>'
+      +'<td style="font-weight:500">'+h.kh+'</td>'
+      +'<td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td>'
+      +'<td><span class="mono">'+fmtD(h.ngay)+'</span></td>'
+      +'<td><span class="amt-pos">+'+fmt(h.doanhThu)+'</span>'+(h.dathu<h.giatri?'<div style="font-size:.67rem;color:var(--orange)">Đã thu: '+fmtM(h.dathu)+'</div>':'<div style="font-size:.67rem;color:var(--green)">Đã thu đủ</div>')+'</td>'
+      +'<td>'+(h.chiTrucTiep>0?'<span class="amt-neg">-'+fmtM(h.chiTrucTiep)+'</span>':'<span style="color:var(--text3)">—</span>')+'</td>'
+      +'<td title="'+phanBoTip+'">'+(h.chiPhanBo>0?'<span style="color:var(--purple)">-'+fmtM(h.chiPhanBo)+'</span><div style="font-size:.64rem;color:var(--text3)">'+phanBoTip+'</div>':'<span style="color:var(--text3)">—</span>')+'</td>'
+      +'<td><span style="font-weight:700;color:'+gopColor+'">'+fmt(h.laiGop)+'</span><div style="font-size:.64rem;color:var(--text3)">'+h.tsGop+'%</div></td>'
+      +'<td><span style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+(h.ln>=0?'+':'')+fmt(h.ln)+'</span><div style="display:flex;align-items:center;gap:4px;margin-top:2px"><div style="width:40px;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+tsColor+'"></div></div><span style="font-size:.64rem;color:'+tsColor+'">'+h.ts+'%</span></div></td>'
+      +'<td>'+(TTMAP[h.tt]||'')+'</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text3)">Không có hợp đồng nào</td></tr>';
 }
 function renderBCXe(){
   var q=(document.getElementById('bc-xe-search').value||'').toLowerCase();
