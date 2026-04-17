@@ -143,7 +143,7 @@ function pct(a,b){return b?((a-b)/b*100).toFixed(1):'0.0';}
 var TTMAP={cho_xe:'<span class="badge b-gray">Chờ thực hiện</span>',dang_chay:'<span class="badge b-blue">Đang thực hiện</span>',hoan_thanh:'<span class="badge b-green">Hoàn thành</span>'};
 var LOAIBADGE={'Thu hợp đồng':'b-green','Đặt cọc':'b-green','Thu khác':'b-green','Nhiên liệu':'b-orange','Sửa chữa':'b-red','Lương tài xế':'b-yellow','Cầu đường':'b-gray','Bảo dưỡng':'b-gray','Khác':'b-gray'};
 function badgeHTML(loai,type){var cls=LOAIBADGE[loai]||(type==='thu'?'b-green':'b-orange');return'<span class="badge '+cls+'">'+loai+'</span>';}
-function toast(msg,type){var wrap=document.getElementById('toastWrap');var t=document.createElement('div');t.className='toast t-'+(type||'info');t.textContent=msg;wrap.appendChild(t);requestAnimationFrame(function(){requestAnimationFrame(function(){t.classList.add('show');});});setTimeout(function(){t.classList.remove('show');setTimeout(function(){t.remove();},400);},3000);}
+function toast(msg,type,duration){var wrap=document.getElementById('toastWrap');var t=document.createElement('div');t.className='toast t-'+(type||'info');t.innerHTML=msg;wrap.appendChild(t);requestAnimationFrame(function(){requestAnimationFrame(function(){t.classList.add('show');});});setTimeout(function(){t.classList.remove('show');setTimeout(function(){t.remove();},400);},duration||3000);}
 function showModal(title,sub,body,footer){document.getElementById('modalTitle').textContent=title;document.getElementById('modalSub').textContent=sub;document.getElementById('modalBody').innerHTML=body;document.getElementById('modalFooter').innerHTML=footer;document.getElementById('mainModal').classList.add('show');}
 function closeModal(){document.getElementById('mainModal').classList.remove('show');}
 function handleModalBg(e){if(e.target===document.getElementById('mainModal'))closeModal();}
@@ -643,6 +643,18 @@ function saveHD(id) {
   }
   var obj = {id:id||uid(),so:document.getElementById('f-so').value,kh:kh,maKH:maKHHD,tuyen:tuyen,ngay:document.getElementById('f-ngay').value||'',ngay_di:ngay_di,ngay_ve:ngay_ve,xe:document.getElementById('f-xe').value,taixe:document.getElementById('f-taixe').value,giatri:giatri,dathu:readMoney('f-dathu'),tt:document.getElementById('f-tt').value};
   var row = {so_hd:obj.so,khach_hang:obj.kh,ma_kh:maKHHD||null,tuyen_duong:obj.tuyen,ngay_th:obj.ngay||null,ngay_di:obj.ngay_di||null,ngay_ve:obj.ngay_ve||null,bien_so_xe:obj.xe,tai_xe:obj.taixe,gia_tri:obj.giatri,da_thu:obj.dathu,trang_thai:obj.tt};
+
+  // ── Kiểm tra: cùng lúc không thể có 2 HĐ dang_chay cho cùng tài xế ──────
+  if(obj.tt === 'dang_chay' && obj.taixe){
+    var conflictHD = DB.hopDong.find(function(h){
+      return h.tt === 'dang_chay' && h.taixe === obj.taixe && h.id !== id;
+    });
+    if(conflictHD){
+      toast('⚠️ Tài xế '+obj.taixe+' đang thực hiện HĐ <strong>'+conflictHD.so+'</strong>.<br>Không thể có 2 hợp đồng chạy cùng lúc!','error',6000);
+      return;
+    }
+  }
+
   (id ? sbPatch('hop_dong',id,row) : sbPost('hop_dong',row)).then(function(res) {
     if (id) DB.hopDong = DB.hopDong.map(function(x){return x.id===id?obj:x;});
     else { if(res&&res[0]&&res[0].id) obj.id=res[0].id; DB.hopDong.unshift(obj); }

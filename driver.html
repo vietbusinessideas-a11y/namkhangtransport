@@ -838,13 +838,15 @@ function populateApp(){
       if(!rows || !rows.length){ setReportButtons(false, false); return; }
 
       // ── Auto-transition: cho_xe có ngay_th <= hôm nay → dang_chay ──────
+      // Điều kiện: chỉ kích hoạt nếu tài xế CHƯA có HĐ dang_chay nào
       var todayStr = (function(){
         var n=new Date(); var yy=n.getFullYear();
         var mm=String(n.getMonth()+1).padStart(2,'0');
         var dd=String(n.getDate()).padStart(2,'0');
         return yy+'-'+mm+'-'+dd;
       })();
-      var toActivate = rows.filter(function(r){
+      var alreadyRunning = rows.some(function(r){ return r.trang_thai === 'dang_chay'; });
+      var toActivate = alreadyRunning ? [] : rows.filter(function(r){
         return r.trang_thai === 'cho_xe' && r.ngay_th && r.ngay_th <= todayStr;
       });
       if(toActivate.length){
