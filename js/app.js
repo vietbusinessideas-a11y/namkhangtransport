@@ -1176,7 +1176,9 @@ function renderTC(){
   renderPager('tc-pager',rows.length,PAGES.tc,'goTCPage');
 }
 function openTCDetail(id){var t=DB.thuChi.find(function(x){return x.id===id;});if(!t)return;var isThu=t.type==='thu';showModal('Chi tiết giao dịch',fmtD(t.ngay)+' · '+t.gio,'<div class="detail-amount '+(isThu?'thu-amt':'chi-amt')+'">'+(isThu?'+ ':' − ')+fmt(t.sotien)+' ₫</div><div class="detail-grid">'+[['Loại',badgeHTML(t.loai,t.type)],['Hình thức',t.httt],['Ngày giờ',fmtD(t.ngay)+' · '+t.gio],['Hợp đồng',t.hd||'—'],['Xe',t.xe||'—'],['Tài xế',t.taixe||'—'],['Đối tác',t.kh||'—'],['Mô tả',t.mota||'—']].map(function(p){return'<div class="detail-item"'+(p[0]==='Đối tác'||p[0]==='Mô tả'?' style="grid-column:1/-1"':'')+'>\'<label>'+p[0]+'</label><div class="dv">'+p[1]+'</div></div>';}).join('')+'</div>','<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>');}
+var _tcModalType='thu'; // lưu type để tcFilterHDByKH biết mode
 function openTCModal(type){
+  _tcModalType=type;
   var isThu=type==='thu';
   var loaiOpts=isThu?'<option>Thu hợp đồng</option><option>Đặt cọc</option><option>Thu khác</option>':'<option>Nhiên liệu</option><option>Lương tài xế</option><option>Sửa chữa</option><option>Cầu đường</option><option>Bảo dưỡng</option><option>Khác</option>';
   var xeOpts='<option value="">—</option>'+DB.xe.map(function(x){return'<option value="'+x.bien+'">'+x.bien+'</option>';}).join('');
@@ -1186,21 +1188,20 @@ function openTCModal(type){
   // KH datalist — gợi ý cả tên và mã KH
   var khDatalist='<datalist id="tc-kh-list">'+DB.khachHang.map(function(k){return'<option value="'+k.ten+'">'+(k.maKH?k.maKH+' – ':'')+k.ten+'</option>';}).join('')+'</datalist>';
 
-  // HĐ còn công nợ (cho Thu) hoặc toàn bộ (cho Chi)
+  // HĐ ban đầu: Thu → chỉ HĐ còn công nợ; Chi → tất cả HĐ
   var hdInitOpts=isThu
     ?('<option value="">— Chọn hợp đồng —</option>'+DB.hopDong.filter(function(h){return h.giatri>h.dathu;}).map(function(h){var con=h.giatri-h.dathu;return'<option value="'+h.id+'">'+h.so+' · '+h.kh+' (còn '+fmtM(con)+')</option>';}).join(''))
-    :('<option value="">—</option>'+DB.hopDong.map(function(h){return'<option value="'+h.id+'">'+h.so+' · '+h.kh+'</option>';}).join(''));
+    :('<option value="">— Chọn hợp đồng —</option>'+DB.hopDong.map(function(h){return'<option value="'+h.id+'">'+h.so+' · '+h.kh+'</option>';}).join(''));
 
-  var khField=isThu
-    ?('<div class="fg"><label class="fl">Khách hàng</label>'+khDatalist
-      +'<input class="fc" id="f-kh" list="tc-kh-list" placeholder="Gõ tên hoặc mã KH để gợi ý..." oninput="tcFilterHDByKH()" autocomplete="off"></div>')
-    :('<div class="fg"><label class="fl">Đối tác</label>'+khDatalist
-      +'<input class="fc" id="f-kh" list="tc-kh-list" placeholder="Tên KH / nhà cung cấp"></div>');
+  // Cả Thu và Chi đều có autocomplete KH + oninput lọc HĐ
+  var khLabel=isThu?'Khách hàng':'Đối tác / Khách hàng';
+  var khField='<div class="fg"><label class="fl">'+khLabel+'</label>'+khDatalist
+    +'<input class="fc" id="f-kh" list="tc-kh-list" placeholder="Gõ tên hoặc mã KH để gợi ý..." oninput="tcFilterHDByKH()" autocomplete="off"></div>';
 
   var hdLabel=isThu
     ?'Hợp đồng liên kết <span style="font-size:.67rem;font-weight:400;color:var(--orange);margin-left:4px">★ chỉ HĐ còn công nợ</span>'
-    :'Liên kết HĐ';
-  var hdOnChange=isThu?' onchange="tcOnHDChange()"':'';
+    :'Hợp đồng liên kết <span style="font-size:.67rem;font-weight:400;color:var(--text3);margin-left:4px">Lọc theo KH đã chọn</span>';
+  var hdOnChange=' onchange="tcOnHDChange()"'; // cả 2 loại đều auto-fill xe/tài xế
 
   showModal(isThu?'💰 Ghi nhận Thu':'💸 Ghi nhận Chi','',
     '<div class="fg"><label class="fl">Loại <span class="req">*</span></label><select class="fc" id="f-loai">'+loaiOpts+'</select></div>'
@@ -1210,7 +1211,7 @@ function openTCModal(type){
     +'<div class="form-row">'
       +'<div class="fg"><label class="fl">'+hdLabel+'</label>'
         +'<select class="fc" id="f-hd"'+hdOnChange+'>'+hdInitOpts+'</select>'
-        +(isThu?'<div id="tc-hd-info" style="display:none;margin-top:6px;padding:8px 10px;background:var(--surface2);border-radius:6px;font-size:.72rem;line-height:1.6"></div>':'')
+        +'<div id="tc-hd-info" style="display:none;margin-top:6px;padding:8px 10px;background:var(--surface2);border-radius:6px;font-size:.72rem;line-height:1.6"></div>'
       +'</div>'
       +'<div class="fg"><label class="fl">Hình thức TT</label><select class="fc" id="f-httt"><option>Chuyển khoản</option><option>Tiền mặt</option></select></div>'
     +'</div>'
@@ -1225,15 +1226,22 @@ function openTCModal(type){
 function tcFilterHDByKH(){
   var q=(document.getElementById('f-kh').value||'').trim().toLowerCase();
   var sel=document.getElementById('f-hd');if(!sel)return;
+  var isThu=_tcModalType==='thu';
   // Tìm KH khớp chính xác (tên hoặc mã)
   var matchKH=DB.khachHang.find(function(k){return k.ten.toLowerCase()===q||(k.maKH&&k.maKH.toLowerCase()===q);});
   var filtered=DB.hopDong.filter(function(h){
-    if(h.giatri<=h.dathu)return false;
+    // Thu: chỉ lấy HĐ còn công nợ; Chi: lấy tất cả
+    if(isThu&&h.giatri<=h.dathu)return false;
+    // Nếu chưa gõ KH → hiện tất cả (theo mode)
     if(!q)return true;
+    // Lọc theo KH: khớp chính xác tên hoặc mã, nếu không thì contains
     if(matchKH)return h.kh===matchKH.ten;
     return h.kh.toLowerCase().includes(q)||(h.maKH&&h.maKH.toLowerCase().includes(q));
   });
-  sel.innerHTML='<option value="">— Chọn hợp đồng —</option>'+filtered.map(function(h){var con=h.giatri-h.dathu;return'<option value="'+h.id+'">'+h.so+' · '+h.kh+' (còn '+fmtM(con)+')</option>';}).join('');
+  sel.innerHTML='<option value="">— Chọn hợp đồng —</option>'+filtered.map(function(h){
+    var extra=isThu?' (còn '+fmtM(h.giatri-h.dathu)+')':'';
+    return'<option value="'+h.id+'">'+h.so+' · '+h.kh+extra+'</option>';
+  }).join('');
   var info=document.getElementById('tc-hd-info');if(info)info.style.display='none';
   var warn=document.getElementById('tc-xe-warn');if(warn)warn.style.display='none';
   // Nếu chỉ còn 1 HĐ → tự chọn luôn
@@ -1245,12 +1253,24 @@ function tcOnHDChange(){
   var warn=document.getElementById('tc-xe-warn');
   if(!hdId){if(info)info.style.display='none';if(warn)warn.style.display='none';return;}
   var h=DB.hopDong.find(function(x){return x.id===hdId;});if(!h)return;
-  // Hiển thị thông tin thanh toán HĐ
+  // Hiển thị thông tin HĐ
   if(info){
-    var con=h.giatri-h.dathu;var pct=h.giatri?Math.round(h.dathu/h.giatri*100):0;
-    info.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-weight:600">'+h.so+'</span><span style="color:var(--orange);font-weight:700">Còn lại: '+fmtM(con)+'</span></div>'
-      +'<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:5px;background:#e2e8f0;border-radius:3px"><div style="width:'+pct+'%;height:100%;background:var(--green);border-radius:3px"></div></div><span style="color:var(--text3);font-size:.68rem">Đã thu '+pct+'% · '+fmtM(h.dathu)+' / '+fmtM(h.giatri)+'</span></div>';
-    info.style.display='';
+    var isThuMode=_tcModalType==='thu';
+    var infoHTML='<div style="display:flex;justify-content:space-between;margin-bottom:5px">'
+      +'<span style="font-weight:600">'+h.so+'</span>'
+      +'<span style="color:var(--text3);font-size:.68rem">'+h.kh+(h.xe?' · '+h.xe:'')+'</span>'
+      +'</div>';
+    if(isThuMode){
+      var con=h.giatri-h.dathu;var pct=h.giatri?Math.round(h.dathu/h.giatri*100):0;
+      infoHTML+='<div style="display:flex;align-items:center;gap:8px">'
+        +'<div style="flex:1;height:5px;background:#e2e8f0;border-radius:3px"><div style="width:'+pct+'%;height:100%;background:var(--green);border-radius:3px"></div></div>'
+        +'<span style="color:var(--text3);font-size:.68rem">Đã thu '+pct+'% · '+fmtM(h.dathu)+' / '+fmtM(h.giatri)+'</span>'
+        +'<span style="color:var(--orange);font-weight:700;font-size:.72rem">Còn: '+fmtM(con)+'</span>'
+        +'</div>';
+    } else {
+      infoHTML+='<span style="font-size:.68rem;color:var(--text3)">Tuyến: '+(h.tuyen||'—')+(h.taixe?' · Tài xế: '+h.taixe:'')+'</span>';
+    }
+    info.innerHTML=infoHTML;info.style.display='';
   }
   // Auto-fill xe và tài xế từ HĐ
   var xeSel=document.getElementById('f-xe');var txSel=document.getElementById('f-taixe');
