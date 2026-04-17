@@ -1486,6 +1486,24 @@ async function submitReport(){
       showToast('⚠️ Offline — báo cáo chưa được lưu lên server');
     }
 
+    // ── Nếu là báo cáo hoàn thành → tự động cập nhật trạng thái HĐ ──
+    if(CURRENT_REPORT === 'hoan_thanh' && SB_URL && SB_KEY){
+      var activeHD = ACTIVE_HDS.length ? ACTIVE_HDS[0]
+        : MOCK_HD.find(function(h){ return h.taixe===(SESSION&&SESSION.driver&&SESSION.driver.ten) && h.tt==='dang_chay'; });
+      if(activeHD && activeHD.so){
+        txt.textContent = 'Đang cập nhật hợp đồng...';
+        try{
+          await sbPatch('hop_dong', 'so_hd=eq.'+encodeURIComponent(activeHD.so), { trang_thai:'hoan_thanh' });
+          // Cập nhật local cache để UI phản ánh ngay
+          ACTIVE_HDS = ACTIVE_HDS.filter(function(h){ return h.so !== activeHD.so; });
+          console.log('[NK] HĐ '+activeHD.so+' → hoan_thanh');
+        } catch(patchErr){
+          console.warn('[NK] Không cập nhật được trạng thái HĐ:', patchErr.message);
+          // Không throw — báo cáo ảnh đã lưu thành công rồi
+        }
+      }
+    }
+
     var type = MODAL_TITLES[CURRENT_REPORT] || CURRENT_REPORT;
     closeModal();
     showToast('✅ Đã gửi '+type+' · '+PHOTOS.length+' ảnh');

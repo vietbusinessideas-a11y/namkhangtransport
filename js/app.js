@@ -2230,6 +2230,172 @@ function markAllRead(){buildNotifs().forEach(function(it){readIds.add(it.id);});
 document.addEventListener('click',function(e){var p=document.getElementById('notifPanel');var btn=document.getElementById('notifBtn');if(p&&p.style.display!=='none'&&!p.contains(e.target)&&btn&&!btn.contains(e.target))closeNotifPanel();});
 
 // ═══════════════════════════════════════
+// [REMOVED: Portal Tài xế — xem driver.html]
+// ═══════════════════════════════════════
+
+function renderDriverPortal(){
+  var sel='';try{sel=localStorage.getItem(DRIVER_KEY)||'';}catch(e){}
+
+  // Badge sidebar: số chuyến đang chạy (tất cả tài xế)
+  var activeCnt=DB.hopDong.filter(function(h){return h.tt==='dang_chay';}).length;
+  var badge=document.getElementById('driverActiveBadge');
+  if(badge){badge.style.display=activeCnt?'':'none';badge.textContent=activeCnt;}
+
+  var txOpts='<option value="">— Chọn tên tài xế —</option>'
+    +DB.taiXe.map(function(t){return'<option value="'+t.ten+'"'+(t.ten===sel?' selected':'')+'>'+t.ten+'</option>';}).join('');
+
+  var content='';
+  if(!sel){
+    content='<div style="text-align:center;padding:70px 20px;color:var(--text3)">'
+      +'<div style="font-size:3.5rem;margin-bottom:14px">🚗</div>'
+      +'<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px">Chọn tên tài xế để xem lịch trình</div>'
+      +'<div style="font-size:.83rem;line-height:1.6">Tài xế bấm chọn tên mình ở góc trên để xem hợp đồng<br>và gửi báo cáo hoàn thành chuyến đi.</div>'
+      +'</div>';
+  } else {
+    var today=new Date();today.setHours(0,0,0,0);
+    var myHDs=DB.hopDong.filter(function(h){return h.taixe===sel;});
+
+    // Đang thực hiện: dang_chay, HOẶC cho_xe mà ngay_di đã đến
+    var active=myHDs.filter(function(h){
+      if(h.tt==='dang_chay')return true;
+      if(h.tt==='cho_xe'){var d=new Date(h.ngay_di||h.ngay||'');d.setHours(0,0,0,0);return d<=today;}
+      return false;
+    });
+
+    // Chờ thực hiện: cho_xe mà ngay_di CHƯA đến
+    var upcoming=myHDs.filter(function(h){
+      if(h.tt!=='cho_xe')return false;
+      var d=new Date(h.ngay_di||h.ngay||'');d.setHours(0,0,0,0);return d>today;
+    }).sort(function(a,b){return(a.ngay_di||a.ngay||'').localeCompare(b.ngay_di||b.ngay||'');});
+
+    // Đã hoàn thành gần nhất
+    var done=myHDs.filter(function(h){return _isCompleted(h);})
+      .sort(function(a,b){return(b.ngay_di||b.ngay||'').localeCompare(a.ngay_di||a.ngay||'');})
+      .slice(0,5);
+
+    // ── Section: Đang thực hiện ──
+    var activeHTML=active.length?active.map(function(h){
+      var ngayVe=h.ngay_ve||h.ngay_di||h.ngay||'';
+      var veD=new Date(ngayVe);veD.setHours(0,0,0,0);
+      var overdue=ngayVe&&veD<today;
+      var dateTxt=fmtD(h.ngay_di||h.ngay||'')+(ngayVe&&ngayVe!==(h.ngay_di||h.ngay)?'&nbsp;→&nbsp;'+fmtD(ngayVe):'');
+      return'<div class="card" style="margin-bottom:14px;border-left:4px solid '+(overdue?'var(--orange)':'var(--green)')+';padding:0">'
+        +'<div style="padding:16px 18px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+            +'<span class="mono" style="font-weight:700;color:var(--blue);font-size:.9rem">'+h.so+'</span>'
+            +(overdue
+              ?'<span style="font-size:.65rem;background:var(--orange);color:#fff;border-radius:4px;padding:2px 8px">⚠ Quá ngày về</span>'
+              :'<span style="font-size:.65rem;background:#dcfce7;color:#15803d;border-radius:4px;padding:2px 8px">🚌 Đang chạy</span>')
+          +'</div>'
+          +'<div style="font-weight:700;font-size:1rem;margin-bottom:5px">'+h.kh+'</div>'
+          +'<div style="font-size:.8rem;color:var(--text2);margin-bottom:4px">📍 '+h.tuyen+'</div>'
+          +'<div style="font-size:.75rem;color:var(--text3);margin-bottom:14px">🗓 '+dateTxt+' &nbsp;·&nbsp; 🚌 '+h.xe+'</div>'
+          +'<button class="btn" style="width:100%;background:var(--green);color:#fff;padding:11px;font-size:.88rem;font-weight:600" onclick="driverConfirmComplete(\''+h.id+'\')">'
+            +'✅&nbsp; Gửi báo cáo hoàn thành'
+          +'</button>'
+        +'</div>'
+      +'</div>';
+    }).join('')
+    :'<div style="text-align:center;padding:28px;color:var(--text3);font-size:.82rem">Không có chuyến đang thực hiện</div>';
+
+    // ── Section: Chờ thực hiện ──
+    var upcomingHTML=upcoming.length?upcoming.map(function(h){
+      var diD=new Date(h.ngay_di||h.ngay||'');diD.setHours(0,0,0,0);
+      var days=Math.round((diD-today)/864e5);
+      return'<div style="display:flex;gap:14px;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer" onclick="openHDDetail(\''+h.id+'\')">'
+        +'<div style="width:46px;height:46px;border-radius:10px;background:var(--accent-light,#eff6ff);display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">'
+          +'<div style="font-size:1.2rem;font-weight:800;color:var(--accent);line-height:1">'+days+'</div>'
+          +'<div style="font-size:.56rem;color:var(--accent);font-weight:600">ngày nữa</div>'
+        +'</div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+h.kh+'</div>'
+          +'<div style="font-size:.74rem;color:var(--text2);margin-top:2px">'+h.tuyen+'</div>'
+          +'<div style="font-size:.7rem;color:var(--text3);margin-top:2px">🗓 '+fmtD(h.ngay_di||h.ngay||'')+(h.ngay_ve&&h.ngay_ve!==(h.ngay_di||h.ngay)?'&nbsp;→&nbsp;'+fmtD(h.ngay_ve):'')+'</div>'
+        +'</div>'
+        +'<span class="mono" style="font-size:.7rem;color:var(--text3);align-self:center;white-space:nowrap">'+h.so+'</span>'
+      +'</div>';
+    }).join('')
+    :'<div style="padding:20px;text-align:center;color:var(--text3);font-size:.82rem">Không có chuyến sắp tới</div>';
+
+    // ── Section: Đã hoàn thành ──
+    var doneHTML=done.length?done.map(function(h){
+      return'<div style="display:flex;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);cursor:pointer;opacity:.75" onclick="openHDDetail(\''+h.id+'\')">'
+        +'<span style="font-size:1.1rem;align-self:center">✅</span>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:.83rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+h.kh+'</div>'
+          +'<div style="font-size:.7rem;color:var(--text3)">'+h.tuyen+' &nbsp;·&nbsp; '+fmtD(h.ngay_di||h.ngay||'')+'</div>'
+        +'</div>'
+        +'<span class="mono" style="font-size:.7rem;color:var(--text3);align-self:center">'+h.so+'</span>'
+      +'</div>';
+    }).join('')
+    :'<div style="padding:20px;text-align:center;color:var(--text3);font-size:.82rem">Chưa có chuyến hoàn thành</div>';
+
+    content=''
+      // Active
+      +'<div style="margin-bottom:22px">'
+        +'<div style="font-size:.75rem;font-weight:700;color:var(--green);letter-spacing:.8px;margin-bottom:10px;display:flex;align-items:center;gap:8px">'
+          +'<span>🚌</span> ĐANG THỰC HIỆN'
+          +(active.length?'<span style="background:var(--green);color:#fff;border-radius:20px;padding:1px 8px;font-size:.68rem">'+active.length+'</span>':'')
+        +'</div>'
+        +activeHTML
+      +'</div>'
+      // Upcoming
+      +'<div style="margin-bottom:22px">'
+        +'<div style="font-size:.75rem;font-weight:700;color:var(--accent);letter-spacing:.8px;margin-bottom:10px;display:flex;align-items:center;gap:8px">'
+          +'<span>📋</span> CHUYẾN SẮP TỚI'
+          +(upcoming.length?'<span style="background:var(--accent);color:#fff;border-radius:20px;padding:1px 8px;font-size:.68rem">'+upcoming.length+'</span>':'')
+        +'</div>'
+        +'<div class="card" style="padding:0;overflow:hidden">'+upcomingHTML+'</div>'
+      +'</div>'
+      // Done
+      +'<div>'
+        +'<div style="font-size:.75rem;font-weight:700;color:var(--text3);letter-spacing:.8px;margin-bottom:10px">✅ ĐÃ HOÀN THÀNH GẦN ĐÂY</div>'
+        +'<div class="card" style="padding:0;overflow:hidden">'+doneHTML+'</div>'
+      +'</div>';
+  }
+
+  document.getElementById('driver-portal-content').innerHTML=''
+    // Header chọn tài xế
+    +'<div class="card" style="margin-bottom:20px;padding:0">'
+      +'<div style="padding:14px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px">'
+        +'<div style="font-size:2.2rem;line-height:1">🚗</div>'
+        +'<div style="flex:1;min-width:120px">'
+          +'<div style="font-weight:700;font-size:.9rem">Portal Tài xế</div>'
+          +'<div style="font-size:.72rem;color:var(--text3)">Xem lịch trình &amp; báo cáo hoàn thành chuyến</div>'
+        +'</div>'
+        +'<select class="fc" style="max-width:200px;min-width:140px;margin:0" onchange="driverSelect(this.value)">'+txOpts+'</select>'
+      +'</div>'
+      +(sel?'<div style="padding:8px 20px;background:var(--surface2);font-size:.75rem;color:var(--text2)">Đang xem lịch trình của <strong>'+sel+'</strong></div>':'')
+    +'</div>'
+    +content;
+}
+
+function driverSelect(val){
+  try{localStorage.setItem(DRIVER_KEY,val);}catch(e){}
+  renderDriverPortal();
+}
+
+function driverConfirmComplete(hdId){
+  var h=DB.hopDong.find(function(x){return x.id===hdId;});
+  if(!h)return;
+  askConfirm({
+    icon:'✅',
+    title:'Xác nhận hoàn thành chuyến?',
+    msg:h.so+' · '+h.kh+' · '+h.tuyen+'\n\nBấm xác nhận để gửi báo cáo. Hợp đồng sẽ chuyển sang Hoàn thành ngay lập tức.',
+    btnLabel:'Xác nhận hoàn thành',
+    btnClass:'btn-accent'
+  },function(){
+    sbPatch('hop_dong',hdId,{trang_thai:'hoan_thanh'}).then(function(){
+      var idx=DB.hopDong.findIndex(function(x){return x.id===hdId;});
+      if(idx>-1)DB.hopDong[idx].tt='hoan_thanh';
+      renderDriverPortal();
+      updateBadges();
+      toast('✅ Đã gửi báo cáo hoàn thành · '+h.so,'success',4000);
+    }).catch(function(e){toast('❌ '+e.message,'error');});
+  });
+}
+
+// ═══════════════════════════════════════
 // CÀI ĐẶT
 // ═══════════════════════════════════════
 var DEFAULT_CD={ten:'Công ty TNHH Nam Khang Transport',mst:'0123456789',sdt:'0908 123 456',email:'contact@namkhang.vn',diachi:'123 Nguyễn Văn Linh, Q.7, TP.HCM'};
