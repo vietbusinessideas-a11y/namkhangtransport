@@ -180,7 +180,7 @@ function calcDuration(ngay_di,ngay_ve){
   if(nights<=0) return 'Trong ngày';
   return (nights+1)+'N'+nights+'D';
 }
-function mapTC(r){return{id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',gio:r.gio_gd||'00:00',sotien:Number(r.so_tien)||0,hd:r.hd_so||'',httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',kh:r.doi_tac||'',mota:r.mo_ta||''};}
+function mapTC(r){return{id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',gio:r.gio_gd||'00:00',sotien:Number(r.so_tien)||0,hd:r.hd_so||'',hd_id:r.hd_id||null,httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',kh:r.doi_tac||'',mota:r.mo_ta||''};}
 function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',tt:r.trang_thai||'san_sang'};}
 function mapTX(r){return{id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',ngaySinh:r.ngay_sinh||'',sdt:r.so_dt||'',luong:Number(r.luong_cb)||0,chuyen:0,doanhThu:0};}
 function mapKH(r){return{id:r.id,maKH:r.ma_kh||'',ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',diaChi:r.dia_chi||'',hdCount:0,doanhSo:0};}
@@ -1175,10 +1175,45 @@ function renderTC(){
   document.getElementById('tc-body').innerHTML=slice.length?slice.map(function(t){var isThu=t.type==='thu';return'<tr onclick="openTCDetail(\''+t.id+'\')"><td><div>'+fmtD(t.ngay)+'</div><div style="font-size:.67rem;color:var(--text3)">'+t.gio+'</div></td><td>'+badgeHTML(t.loai,t.type)+'</td><td><div style="font-weight:500">'+(t.mota||'—')+'</div><div style="font-size:.68rem;color:var(--text3)">'+(t.kh||'—')+'</div></td><td><span class="mono">'+(t.hd||'—')+'</span></td><td><div style="font-size:.75rem">'+(t.xe||'—')+'</div><div style="font-size:.67rem;color:var(--text3)">'+(t.taixe||'—')+'</div></td><td><span class="badge '+(t.httt==='Tiền mặt'?'b-green':'b-blue')+'">'+t.httt+'</span></td><td><span class="'+(isThu?'amt-pos':'amt-neg')+'">'+(isThu?'+':'-')+fmt(t.sotien)+' ₫</span></td><td><div class="row-acts"><button class="ic-btn" onclick="event.stopPropagation();openTCDetail(\''+t.id+'\')">👁️</button><button class="ic-btn del" onclick="event.stopPropagation();askDelete(\'Xóa giao dịch?\',\'\',function(){deleteTC(\''+t.id+'\')})">🗑️</button></div></td></tr>';}).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text3)">Không có giao dịch nào</td></tr>';
   renderPager('tc-pager',rows.length,PAGES.tc,'goTCPage');
 }
-function openTCDetail(id){var t=DB.thuChi.find(function(x){return x.id===id;});if(!t)return;var isThu=t.type==='thu';showModal('Chi tiết giao dịch',fmtD(t.ngay)+' · '+t.gio,'<div class="detail-amount '+(isThu?'thu-amt':'chi-amt')+'">'+(isThu?'+ ':' − ')+fmt(t.sotien)+' ₫</div><div class="detail-grid">'+[['Loại',badgeHTML(t.loai,t.type)],['Hình thức',t.httt],['Ngày giờ',fmtD(t.ngay)+' · '+t.gio],['Hợp đồng',t.hd||'—'],['Xe',t.xe||'—'],['Tài xế',t.taixe||'—'],['Đối tác',t.kh||'—'],['Mô tả',t.mota||'—']].map(function(p){return'<div class="detail-item"'+(p[0]==='Đối tác'||p[0]==='Mô tả'?' style="grid-column:1/-1"':'')+'>\'<label>'+p[0]+'</label><div class="dv">'+p[1]+'</div></div>';}).join('')+'</div>','<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>');}
+function openTCDetail(id){
+  var t=DB.thuChi.find(function(x){return x.id===id;});
+  if(!t)return;
+  var isThu=t.type==='thu';
+  // Tra cứu HĐ liên kết: ưu tiên hd_id, fallback sang t.hd (text)
+  var linkedHD=t.hd_id?DB.hopDong.find(function(h){return h.id===t.hd_id;}):null;
+  var hdSo=linkedHD?linkedHD.so:(t.hd||'');
+  var hdDisplay=linkedHD
+    ?('<span onclick="closeModal();setTimeout(function(){openHDDetail(\''+linkedHD.id+'\')},120)" style="color:var(--blue);cursor:pointer;text-decoration:underline;font-weight:600">'+hdSo+'</span>'
+      +'<span style="font-size:.72rem;color:var(--text3);margin-left:6px">'+linkedHD.kh+'</span>'
+      +'<div style="font-size:.7rem;color:var(--text3);margin-top:2px">'+linkedHD.tuyen+'</div>')
+    :(hdSo||'<span style="color:var(--text3)">—</span>');
+  var rows=[
+    ['Loại',badgeHTML(t.loai,t.type)],
+    ['Hình thức',t.httt],
+    ['Ngày giờ',fmtD(t.ngay)+' · '+t.gio],
+    ['Hợp đồng',hdDisplay],
+    ['Xe',t.xe||'—'],
+    ['Tài xế',t.taixe||'—'],
+    ['Đối tác',t.kh||'—'],
+    ['Mô tả',t.mota||'—']
+  ];
+  var footer=''
+    +'<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'
+    +'<button class="btn btn-ghost" style="color:var(--red);border-color:var(--red)" onclick="askDelete(\'Xóa phiếu này?\',\'Thao tác này không thể hoàn tác\',function(){deleteTC(\''+t.id+'\')})">🗑️ Xóa</button>'
+    +'<button class="btn" style="background:var(--accent);color:#fff" onclick="closeModal();setTimeout(function(){openTCEdit(\''+t.id+'\')},120)">✏️ Sửa</button>';
+  if(linkedHD) footer+='<button class="btn btn-blue" onclick="closeModal();setTimeout(function(){openHDDetail(\''+linkedHD.id+'\')},120)">📄 Xem HĐ '+hdSo+'</button>';
+  showModal('Chi tiết giao dịch',fmtD(t.ngay)+' · '+t.gio,
+    '<div class="detail-amount '+(isThu?'thu-amt':'chi-amt')+'">'+(isThu?'+ ':' − ')+fmt(t.sotien)+' ₫</div>'
+    +'<div class="detail-grid">'+rows.map(function(p){
+      return'<div class="detail-item"'+(p[0]==='Đối tác'||p[0]==='Mô tả'||p[0]==='Hợp đồng'?' style="grid-column:1/-1"':'')+'>\'<label>'+p[0]+'</label><div class="dv">'+p[1]+'</div></div>';
+    }).join('')+'</div>',
+    footer);
+}
 var _tcModalType='thu'; // lưu type để tcFilterHDByKH biết mode
+var _tcEditId=null;     // null = tạo mới; có ID = đang sửa
 function openTCModal(type){
   _tcModalType=type;
+  _tcEditId=null; // reset về chế độ tạo mới mỗi khi mở modal
   var isThu=type==='thu';
   var loaiOpts=isThu
     ?'<option>Thu hợp đồng</option><option>Đặt cọc</option><option>Thu khác</option>'
@@ -1226,7 +1261,7 @@ function openTCModal(type){
     +'</div>'
     +'<div id="tc-xe-warn" style="display:none;margin:-4px 0 8px;padding:9px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:7px;font-size:.76rem;color:#92400e">⚠️ Xe và tài xế đang chọn không khớp với hợp đồng này, cần xem lại!</div>'
     +'<div class="fg"><label class="fl">Mô tả</label><textarea class="fc" id="f-mota" rows="2" style="resize:vertical"></textarea></div>',
-    '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn" style="background:'+(isThu?'var(--green)':'var(--red)')+';color:#fff" onclick="saveTC(\''+type+'\')">💾 Lưu</button>');
+    '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn" id="tc-save-btn" style="background:'+(isThu?'var(--green)':'var(--red)')+';color:#fff" onclick="saveOrUpdateTC(\''+type+'\')">💾 Lưu</button>');
 }
 // Danh sách loại chi phí xe — không liên quan đến HĐ/KH
 var TC_XE_COSTS=['Lương tài xế','Bảo dưỡng','Sửa chữa','Đăng kiểm','Bảo hiểm','Định vị','Phù hiệu'];
@@ -1351,6 +1386,81 @@ function saveTC(type){
   }).catch(function(e){toast('❌ '+e.message,'error');});
 }
 function deleteTC(id){sbDel('thu_chi',id).then(function(){DB.thuChi=DB.thuChi.filter(function(x){return x.id!==id;});renderTCAll();toast('🗑️ Đã xóa','info');}).catch(function(e){toast('❌ '+e.message,'error');});}
+
+// Dispatcher: tạo mới hoặc cập nhật tùy theo _tcEditId
+function saveOrUpdateTC(type){
+  if(_tcEditId) updateTC(_tcEditId,type);
+  else saveTC(type);
+}
+
+// Cập nhật phiếu thu/chi đã có
+function updateTC(id,type){
+  var raw=document.getElementById('f-sotien').value.replace(/[.,\s]/g,'');
+  var sotien=parseInt(raw);
+  if(!sotien||sotien<=0){toast('Nhập số tiền hợp lệ!','error');return;}
+  var loai=document.getElementById('f-loai').value;
+  if(type==='chi'&&TC_XE_COSTS.indexOf(loai)>-1){
+    var xeVal=(document.getElementById('f-xe')||{}).value||'';
+    if(!xeVal){toast('⚠️ Chi phí <strong>'+loai+'</strong> cần chọn số xe!','error',4000);return;}
+  }
+  var hdId=document.getElementById('f-hd').value||null;
+  var hdSo='';if(hdId){var fHD=DB.hopDong.find(function(h){return h.id===hdId;});hdSo=fHD?fHD.so:'';}
+  var patch={danh_muc:loai,ngay_gd:document.getElementById('f-ngay').value,gio_gd:document.getElementById('f-gio').value,so_tien:sotien,hd_id:hdId,hinh_thuc:document.getElementById('f-httt').value,bien_so_xe:document.getElementById('f-xe').value||null,tai_xe:document.getElementById('f-taixe').value||null,doi_tac:document.getElementById('f-kh').value||null,mo_ta:document.getElementById('f-mota').value||null};
+  sbPatch('thu_chi',id,patch).then(function(){
+    var idx=DB.thuChi.findIndex(function(x){return x.id===id;});
+    if(idx>-1){
+      DB.thuChi[idx]=Object.assign({},DB.thuChi[idx],{loai:loai,ngay:patch.ngay_gd,gio:patch.gio_gd,sotien:sotien,hd:hdSo,hd_id:hdId,httt:patch.hinh_thuc,xe:patch.bien_so_xe||'',taixe:patch.tai_xe||'',kh:patch.doi_tac||'',mota:patch.mo_ta||''});
+    }
+    _tcEditId=null;
+    closeModal();renderTCAll();
+    toast('✅ Đã cập nhật phiếu '+(type==='thu'?'thu':'chi'),'success');
+  }).catch(function(e){toast('❌ '+e.message,'error');});
+}
+
+// Mở form sửa phiếu thu/chi — pre-fill toàn bộ dữ liệu cũ
+function openTCEdit(id){
+  var t=DB.thuChi.find(function(x){return x.id===id;});
+  if(!t)return;
+  openTCModal(t.type);    // build form (reset _tcEditId=null)
+  _tcEditId=id;           // set edit mode SAU khi openTCModal đã reset
+  // Đổi tiêu đề modal
+  setTimeout(function(){
+    var titleEl=document.querySelector('.modal-title');
+    if(titleEl)titleEl.textContent=(t.type==='thu'?'✏️ Sửa phiếu Thu':'✏️ Sửa phiếu Chi');
+    var saveBtn=document.getElementById('tc-save-btn');
+    if(saveBtn)saveBtn.textContent='💾 Cập nhật';
+    // Loại
+    var loaiSel=document.getElementById('f-loai');
+    if(loaiSel){for(var i=0;i<loaiSel.options.length;i++){if(loaiSel.options[i].value===t.loai||loaiSel.options[i].text===t.loai){loaiSel.selectedIndex=i;break;}}
+      if(t.type==='chi')tcOnLoaiChange();}
+    // Ngày / Giờ
+    var ngayEl=document.getElementById('f-ngay');if(ngayEl)ngayEl.value=t.ngay||'';
+    var gioEl=document.getElementById('f-gio');if(gioEl)gioEl.value=t.gio||'00:00';
+    // Số tiền — hiển thị dạng formatted
+    var stEl=document.getElementById('f-sotien');if(stEl){stEl.value=fmt(t.sotien);}
+    // Khách hàng
+    var khEl=document.getElementById('f-kh');if(khEl)khEl.value=t.kh||'';
+    // Hợp đồng liên kết
+    var hdSel=document.getElementById('f-hd');
+    if(hdSel&&t.hd_id){
+      var found=false;
+      for(var j=0;j<hdSel.options.length;j++){if(hdSel.options[j].value===t.hd_id){hdSel.selectedIndex=j;found=true;break;}}
+      if(!found){
+        var lhd=DB.hopDong.find(function(h){return h.id===t.hd_id;});
+        if(lhd){var opt=document.createElement('option');opt.value=lhd.id;opt.textContent=lhd.so+' · '+lhd.kh;hdSel.appendChild(opt);hdSel.value=lhd.id;}
+      }
+      if(hdSel.value)tcOnHDChange();
+    }
+    // Hình thức TT
+    var htttSel=document.getElementById('f-httt');
+    if(htttSel){for(var k=0;k<htttSel.options.length;k++){if(htttSel.options[k].value===t.httt||htttSel.options[k].text===t.httt){htttSel.selectedIndex=k;break;}}}
+    // Xe / Tài xế
+    var xeSel=document.getElementById('f-xe');if(xeSel)xeSel.value=t.xe||'';
+    var txSel=document.getElementById('f-taixe');if(txSel)txSel.value=t.taixe||'';
+    // Mô tả
+    var motaEl=document.getElementById('f-mota');if(motaEl)motaEl.value=t.mota||'';
+  },60);
+}
 
 // ═══════════════════════════════════════
 // CHỐT LƯƠNG THÁNG
