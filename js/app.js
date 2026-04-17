@@ -515,9 +515,31 @@ function renderDashboard(){
   // HĐ gần nhất
   document.getElementById('db-hd').innerHTML=DB.hopDong.slice(0,5).map(function(h){return'<tr onclick="openHDDetail(\''+h.id+'\')" style="cursor:pointer" title="Xem chi tiết HĐ '+h.so+'"><td><span class="mono" style="color:var(--blue)">'+h.so+'</span></td><td style="font-weight:500">'+h.kh+'</td><td><span class="amt-pos">+'+fmtM(h.giatri)+'</span></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join('');
 
-  // Tình trạng xe
-  var xeST={dang_chay:{lbl:'Đang chạy',cls:'xs-busy',ico:'🚌'},san_sang:{lbl:'Sẵn sàng',cls:'xs-ok',ico:'✅'},bao_duong:{lbl:'Bảo dưỡng',cls:'xs-warn',ico:'🔧'}};
-  document.getElementById('db-xe').innerHTML=DB.xe.map(function(x){var st=xeST[x.tt]||{lbl:x.tt,cls:'xs-ok',ico:'❓'};var dk=Math.round((new Date(x.dangKiem)-new Date())/864e5);return'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s" onmouseenter="this.style.background=\'var(--surface2)\'" onmouseleave="this.style.background=\'\'" onclick="openXeDetail(\''+x.id+'\')" title="Xem chi tiết '+x.bien+'"><div><div style="font-weight:600;font-size:.8rem">'+x.bien+'</div><div style="font-size:.68rem;color:var(--text3)">'+x.loai+'</div></div><div style="text-align:right"><span class="xe-status '+st.cls+'">'+st.ico+' '+st.lbl+'</span>'+(dk<60?'<div style="font-size:.65rem;color:var(--orange);margin-top:2px">⚠ ĐK: '+dk+' ngày</div>':'')+'</div></div>';}).join('');
+  // Tình trạng xe — suy luận động từ hop_dong thay vì đọc x.tt tĩnh
+  var xeST={dang_chay:{lbl:'Đang chạy',cls:'xs-busy',ico:'🚌'},san_sang:{lbl:'Sẵn sàng',cls:'xs-ok',ico:'✅'},bao_duong:{lbl:'Bảo dưỡng',cls:'xs-warn',ico:'🔧'},cho_xe:{lbl:'Có lịch',cls:'xs-warn',ico:'📅'}};
+  // Build map: bien_so → trạng thái HĐ đang active
+  var xeHDMap={};
+  DB.hopDong.forEach(function(h){
+    if(!h.xe) return;
+    if(h.tt==='dang_chay'){
+      xeHDMap[h.xe]='dang_chay'; // ưu tiên đang chạy
+    } else if(h.tt==='cho_xe' && xeHDMap[h.xe]!=='dang_chay'){
+      xeHDMap[h.xe]='cho_xe';    // có lịch nhưng chưa chạy
+    }
+  });
+  document.getElementById('db-xe').innerHTML=DB.xe.map(function(x){
+    // Bảo dưỡng: ưu tiên flag thủ công
+    var derivedTT = x.tt==='bao_duong' ? 'bao_duong' : (xeHDMap[x.bien]||'san_sang');
+    var st=xeST[derivedTT]||{lbl:derivedTT,cls:'xs-ok',ico:'❓'};
+    var dk=Math.round((new Date(x.dangKiem)-new Date())/864e5);
+    // Tên HĐ đang gán (nếu có)
+    var activeHD=DB.hopDong.find(function(h){return h.xe===x.bien&&(h.tt==='dang_chay'||h.tt==='cho_xe');});
+    var hdBadge=activeHD?'<div style="font-size:.64rem;color:var(--text3);margin-top:1px">'+activeHD.so+' · '+activeHD.kh+'</div>':'';
+    return'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s" onmouseenter="this.style.background=\'var(--surface2)\'" onmouseleave="this.style.background=\'\'" onclick="openXeDetail(\''+x.id+'\')" title="Xem chi tiết '+x.bien+'">'
+      +'<div><div style="font-weight:600;font-size:.8rem">'+x.bien+'</div><div style="font-size:.68rem;color:var(--text3)">'+x.loai+'</div>'+hdBadge+'</div>'
+      +'<div style="text-align:right"><span class="xe-status '+st.cls+'">'+st.ico+' '+st.lbl+'</span>'+(dk<60?'<div style="font-size:.65rem;color:var(--orange);margin-top:2px">⚠ ĐK: '+dk+' ngày</div>':'')+'</div>'
+      +'</div>';
+  }).join('');
 
   // Top tài xế
   var driverEl=document.getElementById('db-driver-rank');
