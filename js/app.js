@@ -342,7 +342,7 @@ var PAGE_META={
   hopdong:{title:'Hợp đồng',sub:'Quản lý hợp đồng vận chuyển',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="openHDModal()">＋ Thêm hợp đồng</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportHD()">📥 Xuất Excel</button>';}},
   khachhang:{title:'Khách hàng',sub:'Danh sách đối tác',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="openKHModal()">＋ Thêm KH</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportKH()">📥 Xuất Excel</button>';}},
   xe:{title:'Xe & Tài xế',sub:'Quản lý phương tiện',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="xeTab===\'xe\'?openXeModal():openTXModal()">＋ Thêm mới</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportExcel()">📥 Xuất Excel</button>';}},
-  thuchi:{title:'Thu Chi',sub:'Ghi nhận doanh thu & chi phí',actions:function(){return'<button class="btn btn-green" onclick="openTCModal(\'thu\')">＋ Ghi thu</button><button class="btn btn-red" onclick="openTCModal(\'chi\')">＋ Ghi chi</button><button class="btn btn-ghost btn-sm" onclick="exportTC()">📥 Xuất Excel</button>';}},
+  thuchi:{title:'Thu Chi',sub:'Ghi nhận doanh thu & chi phí',actions:function(){return'<button class="btn btn-green" onclick="openTCModal(\'thu\')">＋ Ghi thu</button><button class="btn btn-red" onclick="openTCModal(\'chi\')">＋ Ghi chi</button><button class="btn btn-ghost btn-sm" onclick="chotLuongThang()" title="Tạo phiếu chi lương hàng loạt cho tài xế">💰 Chốt lương</button><button class="btn btn-ghost btn-sm" onclick="exportTC()">📥 Xuất Excel</button>';}},
   baocao:{title:'Báo cáo & Thống kê',sub:'Phân tích tài chính',actions:function(){return'';}},
   caidat:{title:'Cài đặt',sub:'Thông tin hệ thống',actions:function(){return'';}},
 };
@@ -1351,6 +1351,127 @@ function saveTC(type){
   }).catch(function(e){toast('❌ '+e.message,'error');});
 }
 function deleteTC(id){sbDel('thu_chi',id).then(function(){DB.thuChi=DB.thuChi.filter(function(x){return x.id!==id;});renderTCAll();toast('🗑️ Đã xóa','info');}).catch(function(e){toast('❌ '+e.message,'error');});}
+
+// ═══════════════════════════════════════
+// CHỐT LƯƠNG THÁNG
+// ═══════════════════════════════════════
+function chotLuongThang(){
+  var now=new Date();
+  // Mặc định tháng hiện tại, format YYYY-MM để dùng với input[type=month]
+  var defaultMonth=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+
+  function _buildModal(selMonth){
+    var parts=selMonth.split('-');
+    var y=parseInt(parts[0]),m=parseInt(parts[1]);
+    var ym=String(m).padStart(2,'0')+'/'+y; // MM/YYYY cho getMY
+    var lastDay=new Date(y,m,0).getDate();
+    var ngayChi=y+'-'+String(m).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+
+    // Tài xế có lương > 0
+    var dsTX=DB.taiXe.filter(function(tx){return tx.luong>0;});
+
+    // Kiểm tra đã phát sinh lương chưa (có bản ghi Lương tài xế trong tháng đó)
+    var rows=dsTX.map(function(tx){
+      var daCoPhieu=DB.thuChi.some(function(t){
+        return t.type==='chi'&&t.loai==='Lương tài xế'&&t.taixe===tx.ten&&getMY(t.ngay)===ym;
+      });
+      return{tx:tx,daCoPhieu:daCoPhieu};
+    });
+
+    var chuaPhieu=rows.filter(function(r){return!r.daCoPhieu;});
+    var daPhieu=rows.filter(function(r){return r.daCoPhieu;});
+
+    var tableHTML='<div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-size:.78rem;color:var(--text3)">Ngày chi: <strong>'+ngayChi.split('-').reverse().join('/')+'</strong></span>'
+      +'<span style="font-size:.78rem;color:var(--green);font-weight:600">Tổng: '+fmtM(chuaPhieu.reduce(function(s,r){return s+r.tx.luong;},0))+'</span>'
+      +'</div>';
+
+    if(!dsTX.length){
+      tableHTML+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:.83rem">Chưa có tài xế nào có lương cơ bản. Vào mục Tài xế để cập nhật lương.</div>';
+    } else {
+      tableHTML+='<table class="dt" style="width:100%;font-size:.78rem"><thead><tr>'
+        +'<th style="width:32px"><input type="checkbox" id="luong-chk-all" onchange="document.querySelectorAll(\'.luong-chk\').forEach(function(c){if(!c.disabled)c.checked=this.checked;}.bind(this))"></th>'
+        +'<th>Tài xế</th><th style="text-align:right">Lương CB</th><th>Trạng thái</th></tr></thead><tbody>';
+
+      rows.forEach(function(r){
+        var disabled=r.daCoPhieu;
+        tableHTML+='<tr style="'+(disabled?'opacity:.5':'')+'"><td>'
+          +'<input type="checkbox" class="luong-chk" data-id="'+r.tx.id+'" data-ten="'+r.tx.ten+'" data-luong="'+r.tx.luong+'" '
+          +(!disabled?'checked':'')+' '+(disabled?'disabled':'')+'>'
+          +'</td>'
+          +'<td style="font-weight:500">'+r.tx.ten+'</td>'
+          +'<td style="text-align:right;font-family:\'DM Mono\',monospace">'+fmt(r.tx.luong)+' ₫</td>'
+          +'<td>'+(disabled
+            ?'<span style="font-size:.68rem;background:var(--surface2);color:var(--text3);padding:2px 7px;border-radius:4px">✓ Đã phát sinh</span>'
+            :'<span style="font-size:.68rem;background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:4px">Chưa phát sinh</span>')
+          +'</td></tr>';
+      });
+      tableHTML+='</tbody></table>';
+    }
+
+    return{html:tableHTML,ngayChi:ngayChi,ym:ym,chuaPhieu:chuaPhieu.length};
+  }
+
+  function _openModal(selMonth){
+    var built=_buildModal(selMonth);
+    var body='<div class="fg" style="margin-bottom:12px">'
+      +'<label class="fl">Chọn tháng</label>'
+      +'<input type="month" class="fc" id="luong-month" value="'+selMonth+'" onchange="chotLuongThangRefresh(this.value)" style="max-width:180px">'
+      +'</div>'+built.html;
+    var footer='<button class="btn btn-ghost" onclick="closeModal()">Hủy</button>'
+      +(built.chuaPhieu>0
+        ?'<button class="btn btn-green" onclick="chotLuongConfirm(\''+selMonth+'\')">💰 Tạo '+built.chuaPhieu+' phiếu chi lương</button>'
+        :'<span style="font-size:.78rem;color:var(--text3);padding:0 12px">Tất cả đã được phát sinh</span>');
+    showModal('💰 Chốt lương tháng','Kiểm tra và xác nhận phiếu chi lương tài xế',body,footer);
+  }
+
+  _openModal(defaultMonth);
+  // Lưu hàm refresh vào global để onchange gọi được
+  window.chotLuongThangRefresh=function(v){_openModal(v);};
+}
+
+function chotLuongConfirm(selMonth){
+  var checkboxes=document.querySelectorAll('.luong-chk:checked:not(:disabled)');
+  if(!checkboxes.length){toast('Không có tài xế nào được chọn','error');return;}
+  var parts=selMonth.split('-');
+  var y=parseInt(parts[0]),m=parseInt(parts[1]);
+  var lastDay=new Date(y,m,0).getDate();
+  var ngayChi=y+'-'+String(m).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+  var ym=String(m).padStart(2,'0')+'/'+y;
+  var moTaThang='Tháng '+m+'/'+y;
+
+  var tasks=[];
+  checkboxes.forEach(function(chk){
+    tasks.push({ten:chk.dataset.ten,luong:parseInt(chk.dataset.luong)||0});
+  });
+
+  closeModal();
+  toast('⏳ Đang tạo '+tasks.length+' phiếu chi lương...','info',2000);
+
+  var done=0;var errors=0;
+  tasks.forEach(function(task){
+    var obj={id:uid(),type:'chi',loai:'Lương tài xế',ngay:ngayChi,gio:'23:59',
+      sotien:task.luong,hd:'',hd_id:null,httt:'Chuyển khoản',
+      xe:'',taixe:task.ten,kh:'',mota:'Lương cố định '+moTaThang+' · '+task.ten};
+    var row={loai_gd:'chi',danh_muc:'Lương tài xế',ngay_gd:ngayChi,gio_gd:'23:59',
+      so_tien:task.luong,hinh_thuc:'Chuyển khoản',tai_xe:task.ten,
+      mo_ta:obj.mota,hd_id:null,bien_so_xe:null,doi_tac:null};
+    sbPost('thu_chi',row).then(function(res){
+      if(res&&res[0]&&res[0].id)obj.id=res[0].id;
+      DB.thuChi.unshift(obj);done++;
+      if(done+errors===tasks.length){
+        renderTCAll();
+        toast('✅ Đã tạo '+done+' phiếu chi lương '+moTaThang+(errors?' ('+errors+' lỗi)':''),'success',5000);
+      }
+    }).catch(function(){
+      errors++;
+      if(done+errors===tasks.length){
+        renderTCAll();
+        toast((done?'✅ '+done+' phiếu OK · ':'')+'❌ '+errors+' phiếu lỗi','error',5000);
+      }
+    });
+  });
+}
 
 // ═══════════════════════════════════════
 // BÁO CÁO
