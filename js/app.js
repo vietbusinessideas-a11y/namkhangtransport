@@ -1383,9 +1383,9 @@ function calcAllocatedCost(h){
     return t.type==='chi'&&t.xe===h.xe&&getMY(t.ngay)===ym&&TC_XE_LOAI.indexOf(t.loai)>-1;
   }).reduce(function(s,t){return s+t.sotien;},0):0;
 
-  // Tổng số ngày xe này có HĐ trong tháng (để tính mẫu số)
+  // Mẫu số: chỉ tính HĐ HOÀN THÀNH của xe này trong tháng
   var xeTotalDays=h.xe?DB.hopDong.filter(function(hh){
-    return hh.xe===h.xe&&getMY(hh.ngay_di||hh.ngay||'')===ym;
+    return hh.xe===h.xe&&_isCompleted(hh)&&getMY(hh.ngay_di||hh.ngay||'')===ym;
   }).reduce(function(s,hh){return s+getContractDays(hh);},0):0;
 
   var xeCost=(xeTotalDays>0&&xeFixedTotal>0)?Math.round(xeFixedTotal*days/xeTotalDays):0;
@@ -1395,9 +1395,9 @@ function calcAllocatedCost(h){
     return t.type==='chi'&&t.taixe===h.taixe&&getMY(t.ngay)===ym&&TC_TX_LOAI.indexOf(t.loai)>-1;
   }).reduce(function(s,t){return s+t.sotien;},0):0;
 
-  // Tổng số ngày tài xế này có HĐ trong tháng
+  // Mẫu số: chỉ tính HĐ HOÀN THÀNH của tài xế này trong tháng
   var txTotalDays=h.taixe?DB.hopDong.filter(function(hh){
-    return hh.taixe===h.taixe&&getMY(hh.ngay_di||hh.ngay||'')===ym;
+    return hh.taixe===h.taixe&&_isCompleted(hh)&&getMY(hh.ngay_di||hh.ngay||'')===ym;
   }).reduce(function(s,hh){return s+getContractDays(hh);},0):0;
 
   var luongCost=(txTotalDays>0&&luongTotal>0)?Math.round(luongTotal*days/txTotalDays):0;
@@ -1417,13 +1417,14 @@ function renderBCHopDong(){
   var ymList=d.ymList;
   function _inP(h){return ymList.indexOf((h.ngay_di||h.ngay||'').slice(0,7))>=0;}
   var rows=DB.hopDong.filter(_inP).map(function(h){
+    // Doanh thu chỉ tính khi HĐ đã HOÀN THÀNH
+    var doanhThu=_isCompleted(h)?h.giatri:0;
     // Chi trực tiếp: phiếu chi có liên kết HĐ
     var chiTrucTiep=DB.thuChi.filter(function(t){return t.type==='chi'&&t.hd_id===h.id;}).reduce(function(s,t){return s+t.sotien;},0);
-    // Chi phí phân bổ từ chi phí xe/tài xế cố định
-    var alloc=calcAllocatedCost(h);
+    // Chi phí phân bổ từ chi phí xe/tài xế cố định (chỉ tính khi hoàn thành)
+    var alloc=_isCompleted(h)?calcAllocatedCost(h):{xeCost:0,luongCost:0,total:0,days:getContractDays(h)};
     var chiPhanBo=alloc.total;
     var tongChi=chiTrucTiep+chiPhanBo;
-    var doanhThu=h.giatri;
     // Lãi gộp (chỉ trừ chi trực tiếp)
     var laiGop=doanhThu-chiTrucTiep;
     var tsGop=doanhThu>0?Math.round(laiGop/doanhThu*100):0;
@@ -1441,7 +1442,7 @@ function renderBCHopDong(){
   var tongConLai=rows.reduce(function(s,h){return s+(h.giatri-h.dathu);},0);
 
   document.getElementById('bc-hd-kpi').innerHTML=[
-    {cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tongThu),sub:rows.length+' HĐ · '+d.lbl},
+    {cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tongThu),sub:rows.filter(function(h){return _isCompleted(h);}).length+' HĐ hoàn thành · '+d.lbl},
     {cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Chi trực tiếp',val:fmtM(tongChiTT),sub:'Chi có liên kết HĐ'},
     {cls:'c-purple',ic:'ic-purple',ico:'🔧',lbl:'Chi phí phân bổ',val:fmtM(tongChiPB),sub:'Xe + lương tài xế'},
     {cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận thực',val:fmtM(tongLNThuc),sub:tongThu>0?((tongLNThuc/tongThu*100).toFixed(1)+'% tỷ suất'):''},
@@ -1477,21 +1478,20 @@ function renderBCHopDong(){
 function renderBCXe(){
   var q=(document.getElementById('bc-xe-search').value||'').toLowerCase();
   var sort=(document.getElementById('bc-xe-sort')||{}).value||'ln_desc';
-  // Build per-vehicle stats from hopDong + thuChi
+  // Lọc theo kỳ hiện tại
+  var d=buildBC()[bcPeriod];var ymList=d.ymList;
+  function _inP(dateStr){return ymList.indexOf((dateStr||'').slice(0,7))>=0;}
+  // Build per-vehicle stats — chỉ HĐ HOÀN THÀNH trong kỳ
   var xeMap={};
-  DB.hopDong.forEach(function(h){
-    if(!h.xe)return;
+  DB.hopDong.filter(function(h){return h.xe&&_isCompleted(h)&&_inP(h.ngay_di||h.ngay||'');}).forEach(function(h){
     if(!xeMap[h.xe])xeMap[h.xe]={bien:h.xe,loai:'',chuyen:0,doanhThu:0,chiPhi:0,hds:[]};
     var v=xeMap[h.xe];
     v.chuyen++;
-    // Doanh thu = giatri HĐ hoàn thành (nhất quán với quy tắc ghi nhận doanh thu)
-    if(h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan') v.doanhThu+=h.giatri||0;
+    v.doanhThu+=h.giatri||0;
     v.hds.push(h.so);
-    var chi=DB.thuChi.filter(function(t){return t.type==='chi'&&(t.hd_id===h.id||t.hd===h.so)&&t.xe===h.xe;}).reduce(function(s,t){return s+t.sotien;},0);
-    v.chiPhi+=chi;
   });
-  // Also capture direct chi by xe (not linked to HD)
-  DB.thuChi.filter(function(t){return t.type==='chi'&&t.xe&&t.xe!=='Tất cả'&&!t.hd;}).forEach(function(t){
+  // Chi phí xe gắn trực tiếp HĐ trong kỳ
+  DB.thuChi.filter(function(t){return t.type==='chi'&&t.xe&&_inP(t.ngay||'');}).forEach(function(t){
     if(!xeMap[t.xe])xeMap[t.xe]={bien:t.xe,loai:'',chuyen:0,doanhThu:0,chiPhi:0,hds:[]};
     xeMap[t.xe].chiPhi+=t.sotien;
   });
@@ -1502,12 +1502,17 @@ function renderBCXe(){
   });
   var rows=Object.values(xeMap).map(function(v){
     v.ln=v.doanhThu-v.chiPhi;v.ts=v.doanhThu>0?Math.round(v.ln/v.doanhThu*100):0;return v;
-  }).filter(function(v){return!q||[v.bien,v.loai].join(' ').toLowerCase().includes(q);})
+  }).filter(function(v){return(v.chuyen>0||v.chiPhi>0)&&(!q||[v.bien,v.loai].join(' ').toLowerCase().includes(q));})
     .sort(function(a,b){if(sort==='ln_asc')return a.ln-b.ln;if(sort==='dt_desc')return b.doanhThu-a.doanhThu;if(sort==='chuyen_desc')return b.chuyen-a.chuyen;return b.ln-a.ln;});
   var tDT=rows.reduce(function(s,r){return s+r.doanhThu;},0);
   var tChi=rows.reduce(function(s,r){return s+r.chiPhi;},0);
   var tLN=tDT-tChi;
-  document.getElementById('bc-xe-kpi').innerHTML=[{cls:'c-blue',ico:'🚌',lbl:'Số xe hoạt động',val:rows.filter(function(r){return r.chuyen>0;}).length+' xe',sub:rows.length+' tổng số'},{cls:'c-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tDT),sub:'Từ hợp đồng'},{cls:'c-red',ico:'💸',lbl:'Tổng chi phí',val:fmtM(tChi),sub:'Trực tiếp + gián tiếp'},{cls:'c-blue',ico:'📈',lbl:'Tổng lợi nhuận',val:fmtM(tLN),sub:tDT>0?((tLN/tDT*100).toFixed(1)+'% tỷ suất'):''}].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':'accent';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon ic-blue">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
+  document.getElementById('bc-xe-kpi').innerHTML=[
+    {cls:'c-blue',ico:'🚌',lbl:'Số xe hoạt động',val:rows.filter(function(r){return r.chuyen>0;}).length+' xe',sub:d.lbl},
+    {cls:'c-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tDT),sub:'Theo giá trị HĐ'},
+    {cls:'c-red',ico:'💸',lbl:'Tổng chi phí',val:fmtM(tChi),sub:'Trực tiếp theo xe'},
+    {cls:'c-blue',ico:'📈',lbl:'Tổng lợi nhuận',val:fmtM(tLN),sub:tDT>0?((tLN/tDT*100).toFixed(1)+'% tỷ suất'):''}
+  ].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':'accent';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon ic-blue">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
   document.getElementById('bc-xe-count').textContent=rows.length+' xe';
   document.getElementById('bc-xe-summary').innerHTML='<span style="color:var(--green)">↑ '+fmtM(tDT)+'</span><span style="color:var(--border)">|</span><span style="color:var(--red)">↓ '+fmtM(tChi)+'</span><span style="color:var(--border)">|</span><span style="color:var(--accent);font-weight:700">= '+fmtM(tLN)+'</span>';
   document.getElementById('bc-xe-body').innerHTML=rows.length?rows.map(function(v){var tsColor=v.ts>=30?'var(--green)':v.ts>=15?'var(--accent)':v.ts>=0?'var(--orange)':'var(--red)';var barW=Math.min(100,Math.max(0,v.ts));return'<tr onclick="openXeDetailBC(\''+encodeURIComponent(v.bien)+'\')" style="cursor:pointer" title="Xem chi tiết HĐ của '+v.bien+'"><td><div style="font-weight:700;font-size:.82rem;letter-spacing:.5px">'+v.bien+'</div><div style="font-size:.68rem;color:var(--text3)">'+v.loai+'</div></td><td><span class="mono" style="font-weight:600">'+v.chuyen+'</span><div style="font-size:.67rem;color:var(--text3)">chuyến</div></td><td><span class="amt-pos">+'+fmtM(v.doanhThu)+'</span></td><td>'+(v.chiPhi>0?'<span class="amt-neg">-'+fmtM(v.chiPhi)+'</span>':'<span style="color:var(--text3)">—</span>')+'</td><td><span style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+(v.ln>=0?'+':'')+fmtM(v.ln)+'</span></td><td><div style="display:flex;align-items:center;gap:6px"><div style="width:50px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+tsColor+';border-radius:3px"></div></div><span style="font-size:.72rem;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+v.ts+'%</span></div></td><td><span style="font-size:.73rem;padding:3px 8px;border-radius:6px;background:var(--surface2);color:var(--text2)">'+(v.chuyen>0?'Đang hoạt động':'Chưa dùng')+'</span></td></tr>';}).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">Chưa có dữ liệu xe</td></tr>';
@@ -1584,18 +1589,22 @@ function openXeDetailBC(bienEncoded){
 function renderBCTaiXe(){
   var q=(document.getElementById('bc-tx-search').value||'').toLowerCase();
   var sort=(document.getElementById('bc-tx-sort')||{}).value||'ln_desc';
-  // Build per-driver stats
+  // Lọc theo kỳ hiện tại
+  var d=buildBC()[bcPeriod];var ymList=d.ymList;
+  function _inP(dateStr){return ymList.indexOf((dateStr||'').slice(0,7))>=0;}
+  // Build per-driver stats — chỉ HĐ HOÀN THÀNH trong kỳ
   var txMap={};
-  DB.hopDong.forEach(function(h){
-    if(!h.taixe)return;
+  DB.hopDong.filter(function(h){return h.taixe&&_isCompleted(h)&&_inP(h.ngay_di||h.ngay||'');}).forEach(function(h){
     if(!txMap[h.taixe])txMap[h.taixe]={ten:h.taixe,chuyen:0,doanhThu:0,chiPhi:0,tuyen:{}};
     var v=txMap[h.taixe];
     v.chuyen++;
-    // Doanh thu = giatri HĐ hoàn thành (nhất quán với quy tắc ghi nhận doanh thu)
-    if(h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan') v.doanhThu+=h.giatri||0;
+    v.doanhThu+=h.giatri||0;
     if(h.tuyen)v.tuyen[h.tuyen]=(v.tuyen[h.tuyen]||0)+1;
-    var chi=DB.thuChi.filter(function(t){return t.type==='chi'&&(t.hd_id===h.id||t.hd===h.so)&&t.taixe===h.taixe;}).reduce(function(s,t){return s+t.sotien;},0);
-    v.chiPhi+=chi;
+  });
+  // Chi phí tài xế trong kỳ (lương + chi có gắn tài xế)
+  DB.thuChi.filter(function(t){return t.type==='chi'&&t.taixe&&_inP(t.ngay||'');}).forEach(function(t){
+    if(!txMap[t.taixe])txMap[t.taixe]={ten:t.taixe,chuyen:0,doanhThu:0,chiPhi:0,tuyen:{}};
+    txMap[t.taixe].chiPhi+=t.sotien;
   });
   // Enrich with taiXe master data
   DB.taiXe.forEach(function(tx){
@@ -1608,13 +1617,18 @@ function renderBCTaiXe(){
     v.ln=v.doanhThu-v.chiPhi;v.ts=v.doanhThu>0?Math.round(v.ln/v.doanhThu*100):0;
     var tuyenArr=Object.entries(v.tuyen||{}).sort(function(a,b){return b[1]-a[1];});
     v.topTuyen=tuyenArr.length?tuyenArr[0][0]:'—';return v;
-  }).filter(function(v){return!q||v.ten.toLowerCase().includes(q);})
+  }).filter(function(v){return(v.chuyen>0||v.chiPhi>0)&&(!q||v.ten.toLowerCase().includes(q));})
     .sort(function(a,b){if(sort==='ln_asc')return a.ln-b.ln;if(sort==='dt_desc')return b.doanhThu-a.doanhThu;if(sort==='chuyen_desc')return b.chuyen-a.chuyen;return b.ln-a.ln;});
   var tDT=rows.reduce(function(s,r){return s+r.doanhThu;},0);
   var tChi=rows.reduce(function(s,r){return s+r.chiPhi;},0);
   var tLN=tDT-tChi;
   var tChuyen=rows.reduce(function(s,r){return s+r.chuyen;},0);
-  document.getElementById('bc-tx-kpi').innerHTML=[{cls:'c-blue',ico:'👤',lbl:'Số tài xế',val:rows.filter(function(r){return r.chuyen>0;}).length+' người',sub:rows.length+' tổng số'},{cls:'c-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tDT),sub:'Từ hợp đồng đã thu'},{cls:'c-orange',ico:'🚗',lbl:'Tổng số chuyến',val:tChuyen+' chuyến',sub:'Bình quân '+( rows.length?Math.round(tChuyen/rows.length):0)+'/người'},{cls:'c-blue',ico:'📈',lbl:'Tổng lợi nhuận',val:fmtM(tLN),sub:tDT>0?((tLN/tDT*100).toFixed(1)+'% tỷ suất'):''}].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-orange'?'orange':'accent';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon ic-blue">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
+  document.getElementById('bc-tx-kpi').innerHTML=[
+    {cls:'c-blue',ico:'👤',lbl:'Số tài xế',val:rows.filter(function(r){return r.chuyen>0;}).length+' người',sub:d.lbl},
+    {cls:'c-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tDT),sub:'Theo giá trị HĐ'},
+    {cls:'c-orange',ico:'🚗',lbl:'Tổng số chuyến',val:tChuyen+' chuyến',sub:'Bình quân '+(rows.filter(function(r){return r.chuyen>0;}).length?Math.round(tChuyen/rows.filter(function(r){return r.chuyen>0;}).length):0)+'/người'},
+    {cls:'c-blue',ico:'📈',lbl:'Tổng lợi nhuận',val:fmtM(tLN),sub:tDT>0?((tLN/tDT*100).toFixed(1)+'% tỷ suất'):''}
+  ].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-orange'?'orange':'accent';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon ic-blue">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
   document.getElementById('bc-tx-count').textContent=rows.length+' tài xế';
   document.getElementById('bc-tx-summary').innerHTML='<span style="color:var(--green)">↑ '+fmtM(tDT)+'</span><span style="color:var(--border)">|</span><span style="color:var(--accent);font-weight:700">= '+fmtM(tLN)+'</span>';
   document.getElementById('bc-tx-body').innerHTML=rows.length?rows.map(function(v,i){var tsColor=v.ts>=30?'var(--green)':v.ts>=15?'var(--accent)':v.ts>=0?'var(--orange)':'var(--red)';var barW=Math.min(100,Math.max(0,v.ts));var medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';return'<tr onclick="openTXDetail(\''+encodeURIComponent(v.ten)+'\')" style="cursor:pointer"><td><div style="display:flex;align-items:center;gap:8px"><span style="font-size:1.1rem">'+medal+'</span><div><div style="font-weight:600;font-size:.83rem">'+v.ten+'</div><div style="font-size:.67rem;color:var(--text3)">'+(v.xe||v.phone||'')+'</div></div></div></td><td><span class="mono" style="font-weight:600">'+v.chuyen+'</span><div style="font-size:.67rem;color:var(--text3)">chuyến</div></td><td><span class="amt-pos">+'+fmtM(v.doanhThu)+'</span></td><td>'+(v.chiPhi>0?'<span class="amt-neg">-'+fmtM(v.chiPhi)+'</span>':'<span style="color:var(--text3)">—</span>')+'</td><td><span style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+(v.ln>=0?'+':'')+fmtM(v.ln)+'</span></td><td><div style="display:flex;align-items:center;gap:6px"><div style="width:50px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+tsColor+';border-radius:3px"></div></div><span style="font-size:.72rem;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+v.ts+'%</span></div></td><td style="font-size:.73rem;color:var(--text2);max-width:140px;white-space:normal;line-height:1.35">'+v.topTuyen+'</td></tr>';}).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">Chưa có dữ liệu tài xế</td></tr>';
@@ -1662,10 +1676,11 @@ function exportBCTaiXe(){
 // ── Helpers tổng hợp dữ liệu thực theo kỳ ──────────────────────────────────
 function _ymStr(y,m){return y+'-'+String(m+1).padStart(2,'0');}
 
-// Doanh thu: tính theo giá trị HĐ (tất cả trạng thái) có ngày khởi hành trong tháng
+// Doanh thu: chỉ HĐ đã HOÀN THÀNH, lấy giá trị HĐ, theo ngày khởi hành
+function _isCompleted(h){return h.tt==='hoan_thanh'||h.tt==='cho_thanh_toan';}
 function _sumDoanhThuThang(ymStr){
   return DB.hopDong.filter(function(h){
-    return (h.ngay_di||h.ngay||'').slice(0,7)===ymStr;
+    return _isCompleted(h)&&(h.ngay_di||h.ngay||'').slice(0,7)===ymStr;
   }).reduce(function(s,h){return s+h.giatri;},0);
 }
 // Chi phí: từ thu_chi.type='chi'
@@ -1743,16 +1758,25 @@ function _chiCats(ymList){
     return{n:n,v:totals[n],p:Math.round(totals[n]/total*100),c:_CAT_COLORS[n]||'#94a3b8'};
   }).sort(function(a,b){return b.v-a.v;});
 }
-function setBCPeriod(p,el){bcPeriod=p;document.querySelectorAll('#page-baocao .ptab').forEach(function(t){t.classList.remove('active');});el.classList.add('active');renderBC();}
+function setBCPeriod(p,el){
+  bcPeriod=p;
+  document.querySelectorAll('#page-baocao .ptab').forEach(function(t){t.classList.remove('active');});
+  el.classList.add('active');
+  renderBC(); // Tổng quan luôn re-render
+  // Re-render tab đang active nếu không phải Tổng quan
+  if(bcTab==='hopdong')renderBCHopDong();
+  else if(bcTab==='xe')renderBCXe();
+  else if(bcTab==='taixe')renderBCTaiXe();
+}
 function renderBC(){
   var d=buildBC()[bcPeriod];
   document.getElementById('bc-period-lbl').textContent=d.lbl;
   document.getElementById('bc-chart-sub').textContent=d.sub;
   document.getElementById('bc-xe-sub').textContent=d.lbl;
   // ── KPI: tính TRỰC TIẾP từ DB theo ymList của kỳ được chọn ──────────────────
-  // doanh thu = giá trị HĐ (tất cả trạng thái) có ngày khởi hành trong kỳ
+  // doanh thu = giá trị HĐ đã HOÀN THÀNH trong kỳ
   function _inPeriod(dateStr,ymList){return ymList.indexOf((dateStr||'').slice(0,7))>=0;}
-  var thu=DB.hopDong.filter(function(h){return _inPeriod(h.ngay_di||h.ngay||'',d.ymList);}).reduce(function(s,h){return s+h.giatri;},0);
+  var thu=DB.hopDong.filter(function(h){return _isCompleted(h)&&_inPeriod(h.ngay_di||h.ngay||'',d.ymList);}).reduce(function(s,h){return s+h.giatri;},0);
   var chi=DB.thuChi.filter(function(tc){return tc.type==='chi'&&_inPeriod(tc.ngay||'',d.ymList);}).reduce(function(s,tc){return s+tc.sotien;},0);
   var ln=thu-chi;
   // prev period: bars[0]=current, bars[1]=kỳ trước (sau reverse)
