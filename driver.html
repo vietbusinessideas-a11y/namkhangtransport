@@ -475,8 +475,8 @@
           <div id="tank-checkbox-sub" style="font-size:.7rem;color:#b45309;margin-top:1px"></div>
         </div>
       </div>
-      <!-- Ô nhập số lít (chỉ hiện khi check) — chỉ dùng cho km_cuoi -->
-      <div id="tank-lit-row" style="display:none;margin-top:10px;display:none">
+      <!-- Ô nhập số lít (chỉ hiện khi check) — dùng cho cả km_dau và km_cuoi -->
+      <div id="tank-lit-row" style="display:none;margin-top:10px">
         <label style="font-size:.72rem;font-weight:600;color:#6b6760;display:block;margin-bottom:5px">
           Số lít đổ lần này <span style="color:#dc2626">*</span>
         </label>
@@ -494,6 +494,20 @@
     <!-- Nhập liệu đổ dầu (chỉ hiện khi do_dau) -->
     <div id="fuel-section" style="display:none;padding:0 20px 12px">
       <div style="font-size:.74rem;font-weight:700;color:#1a1814;margin-bottom:8px">⛽ Thông tin đổ dầu</div>
+
+      <!-- Dropdown chọn HĐ liên kết — chỉ hiện khi không có HĐ đang chạy nhưng có HĐ sắp tới -->
+      <div id="do-dau-hd-row" style="display:none;margin-bottom:10px">
+        <label style="font-size:.72rem;font-weight:600;color:#6b6760;display:block;margin-bottom:5px">
+          📋 Gắn vào hợp đồng <span style="font-size:.67rem;font-weight:400;color:#a09c96">(tùy chọn)</span>
+        </label>
+        <select id="do-dau-hd-select" class="inp" style="font-size:.82rem">
+          <option value="">— Không gắn HĐ (chi phí chung) —</option>
+        </select>
+        <div style="font-size:.67rem;color:#a09c96;margin-top:4px">
+          Chọn nếu lần đổ dầu này chuẩn bị cho chuyến sắp tới
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
           <label style="font-size:.72rem;font-weight:600;color:#6b6760;display:block;margin-bottom:5px">Số lít <span style="color:#dc2626">*</span></label>
@@ -1150,9 +1164,9 @@ function toggleTankFill(){
     cb.style.background   = TANK_FILL_CHECKED ? '#f0fdf4' : '#fff';
     cb.style.borderColor  = TANK_FILL_CHECKED ? '#16a34a' : '#d97706';
   }
-  // Ô nhập số lít chỉ hiện cho km_cuoi (không cho km_dau)
+  // Ô nhập số lít hiện cho cả km_dau lẫn km_cuoi khi đã tick
   if(litRow){
-    litRow.style.display = (TANK_FILL_CHECKED && CURRENT_REPORT === 'km_cuoi') ? 'block' : 'none';
+    litRow.style.display = (TANK_FILL_CHECKED && (CURRENT_REPORT === 'km_dau' || CURRENT_REPORT === 'km_cuoi')) ? 'block' : 'none';
   }
   updateSubmitBtn();
 }
@@ -1273,7 +1287,7 @@ function calcDuration(ngay_di, ngay_ve){
 // REPORT BUTTON STATE
 // ═══════════════════════════════════════
 // Các loại báo cáo CẦN hợp đồng đang chạy
-var REQUIRES_HD = ['do_dau','km_dau','km_cuoi','hoan_thanh','hop_dong']; // thay_nhot không cần HĐ đang chạy
+var REQUIRES_HD = ['km_dau','km_cuoi','hoan_thanh','hop_dong']; // do_dau và thay_nhot không cần HĐ đang chạy
 var TRIP_REPORTS_DONE = {};   // cache: loai → true, cho chuyến đang chạy
 var XE_INFO_CACHE = null;     // cache thông tin xe
 var TANK_FILL_CHECKED = false; // trạng thái checkbox "đổ đầy bình"
@@ -1649,7 +1663,8 @@ function setReportButtons(hasDangChay, hasChoXe){
     banner.style.color = '#92400e';
     banner.innerHTML = '<span style="font-size:1.2rem">⚠️</span>'
       + '<span>Bạn chưa có hợp đồng đang thực hiện.<br>'
-      + '<strong>Một số báo cáo bị tạm khóa</strong> cho đến khi có chuyến được giao.</span>';
+      + '<strong>Km đầu, Km cuối, Hoàn thành</strong> bị khóa. '
+      + 'Vẫn có thể <strong>báo cáo đổ dầu</strong> và <strong>thay nhớt</strong> bình thường.</span>';
   }
 }
 
@@ -1709,6 +1724,26 @@ function openModal(type){
     fuelSec.style.display = (type === 'do_dau') ? 'block' : 'none';
     document.getElementById('modal-so-lit').value = '';
     document.getElementById('modal-tong-tien').value = '';
+
+    // Dropdown liên kết HĐ: chỉ hiện khi do_dau và không có HĐ đang chạy
+    var hdRow = document.getElementById('do-dau-hd-row');
+    var hdSel = document.getElementById('do-dau-hd-select');
+    if(hdRow && hdSel && type === 'do_dau'){
+      var choXeHDs = ACTIVE_HDS.filter(function(h){ return h.tt === 'cho_xe'; });
+      var dangChay = ACTIVE_HDS.some(function(h){ return h.tt === 'dang_chay'; });
+      if(!dangChay && choXeHDs.length > 0){
+        // Rebuild options
+        hdSel.innerHTML = '<option value="">— Không gắn HĐ (chi phí chung) —</option>'
+          + choXeHDs.map(function(h){
+              return '<option value="'+h.so+'">'
+                + h.so + ' · ' + h.kh + ' · ' + (h.tuyen||'') + '</option>';
+            }).join('');
+        hdRow.style.display = 'block';
+      } else {
+        hdRow.style.display = 'none';
+        hdSel.innerHTML = '<option value=""></option>';
+      }
+    }
   }
 
   // Hiện / ẩn section tình trạng bình dầu (km_dau & km_cuoi)
@@ -1730,11 +1765,11 @@ function openModal(type){
     var lbl = document.getElementById('tank-checkbox-lbl');
     var sub = document.getElementById('tank-checkbox-sub');
     if(type === 'km_dau'){
-      if(lbl) lbl.textContent = 'Đã đổ đầy bình trước khi xuất phát';
-      if(sub) sub.textContent = 'Tick nếu bình dầu đã được đổ đầy — giúp tính tiêu hao chính xác';
+      if(lbl) lbl.textContent = 'Đổ đầy bình lúc xuất phát';
+      if(sub) sub.textContent = 'Tick và nhập số lít đổ lần này — điểm bắt đầu tính tiêu hao nhiên liệu';
     } else {
       if(lbl) lbl.textContent = 'Đổ đầy bình khi về bến';
-      if(sub) sub.textContent = 'Tick và nhập số lít đổ lần này để hệ thống tính đúng nhiên liệu';
+      if(sub) sub.textContent = 'Tick và nhập số lít đổ lần này — điểm kết thúc tính tiêu hao nhiên liệu';
     }
   }
 
@@ -1895,9 +1930,9 @@ function updateSubmitBtn(){
     soLitOk = litVal.trim() !== '' && !isNaN(parseFloat(litVal.replace(',','.')));
   }
 
-  // km_cuoi + tick "đổ đầy" → bắt buộc nhập số lít đổ lần cuối
+  // km_dau / km_cuoi + tick "đổ đầy" → bắt buộc nhập số lít
   var tankLitOk = true;
-  if(CURRENT_REPORT === 'km_cuoi' && TANK_FILL_CHECKED){
+  if((CURRENT_REPORT === 'km_dau' || CURRENT_REPORT === 'km_cuoi') && TANK_FILL_CHECKED){
     var tankLit = (document.getElementById('tank-so-lit')||{}).value || '';
     tankLitOk = tankLit.trim() !== '' && !isNaN(parseFloat(tankLit.replace(',','.')));
   }
@@ -1919,7 +1954,7 @@ function updateSubmitBtn(){
   // Hint message
   if(CURRENT_REPORT === 'do_dau' && !soLitOk){
     hint.textContent = 'Cần nhập số lít và ít nhất 1 ảnh để gửi';
-  } else if(CURRENT_REPORT === 'km_cuoi' && TANK_FILL_CHECKED && !tankLitOk){
+  } else if((CURRENT_REPORT === 'km_dau' || CURRENT_REPORT === 'km_cuoi') && TANK_FILL_CHECKED && !tankLitOk){
     hint.textContent = 'Cần nhập số lít đổ đầy bình';
   } else if(CURRENT_REPORT === 'thay_nhot' && !kmOk && !PHOTOS.length){
     hint.textContent = 'Cần nhập số km và ít nhất 1 ảnh để gửi';
@@ -2008,7 +2043,12 @@ async function saveBaoCao(anhUrls){
     (CURRENT_REPORT === 'km_dau' || CURRENT_REPORT === 'km_cuoi')) ? true : null;
 
   var bienXe = d.bienXe && d.bienXe !== '—' ? d.bienXe : (activeHD ? activeHD.xe : null);
-  var hdSo   = activeHD ? activeHD.so : null;
+  // Nếu do_dau không có HĐ đang chạy → kiểm tra dropdown chọn HĐ sắp tới
+  var hdSo = activeHD ? activeHD.so : null;
+  if(!hdSo && CURRENT_REPORT === 'do_dau'){
+    var selEl = document.getElementById('do-dau-hd-select');
+    if(selEl && selEl.value) hdSo = selEl.value;
+  }
 
   var payload = {
     loai:           CURRENT_REPORT,
@@ -2066,6 +2106,39 @@ async function submitReport(){
       // ── Lưu metadata vào bảng bao_cao ──
       txt.textContent = 'Đang lưu báo cáo...';
       await saveBaoCao(anhUrls);
+
+      // ── Nếu km_dau + đổ đầy bình → tự tạo record do_dau cho lần đổ đầu ──
+      if(CURRENT_REPORT === 'km_dau' && TANK_FILL_CHECKED){
+        var tankLitRawD  = (document.getElementById('tank-so-lit')||{}).value || '';
+        var tankTienRawD = (document.getElementById('tank-tong-tien')||{}).value || '';
+        var tankLitD  = tankLitRawD  ? parseFloat(tankLitRawD.replace(',','.'))  : null;
+        var tankTienD = tankTienRawD ? parseInt(tankTienRawD.replace(/\D/g,'')) : null;
+        if(tankLitD && SB_URL && SB_KEY){
+          var dD = SESSION.driver;
+          var activeHDD = ACTIVE_HDS.length ? ACTIVE_HDS[0] : null;
+          var fillDauPayload = {
+            loai:           'do_dau',
+            hd_so:          activeHDD ? activeHDD.so : null,
+            tai_xe_id:      dD.id && !dD.id.startsWith('mock_') ? dD.id : null,
+            tai_xe_ten:     dD.ten,
+            tai_xe_sdt:     dD.sdt,
+            bien_xe:        dD.bienXe && dD.bienXe !== '—' ? dD.bienXe : (activeHDD ? activeHDD.xe : null),
+            ghi_chu:        'Đổ đầy bình lúc xuất phát (tự động từ báo cáo km đầu)',
+            so_lit:         tankLitD,
+            tong_tien:      tankTienD,
+            da_do_day_binh: true,
+            anh_urls:       [],
+            gps_lat:        GPS ? GPS.lat : null,
+            gps_lng:        GPS ? GPS.lng : null,
+          };
+          await fetch(SB_URL+'/rest/v1/bao_cao', {
+            method:'POST',
+            headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,
+                     'Content-Type':'application/json','Prefer':'return=minimal'},
+            body: JSON.stringify(fillDauPayload),
+          });
+        }
+      }
 
       // ── Nếu km_cuoi + đổ đầy bình → tự tạo record do_dau cho lần đổ cuối ──
       if(CURRENT_REPORT === 'km_cuoi' && TANK_FILL_CHECKED){
