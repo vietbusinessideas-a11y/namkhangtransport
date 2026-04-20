@@ -3428,17 +3428,27 @@ function renderFuelSummary(rows){
   // Kiểm tra phương pháp đổ đầy bình (để đánh giá độ chính xác)
   var daDayDau  = !!(kmDauRec  && kmDauRec.da_do_day_binh);
   var daDayCuoi = !!(kmCuoiRec && kmCuoiRec.da_do_day_binh);
-  // Cũng kiểm tra nếu lần đổ dầu cuối cùng có flag da_do_day_binh (auto-tạo từ km_cuoi)
   var doDauRows = rows.filter(function(r){ return r.loai==='do_dau'; });
+  // Kiểm tra có lần đổ đầy bình nào trong chuyến (da_do_day_binh = true trên do_dau)
   if(!daDayCuoi){
     var lastFillRec = doDauRows.find(function(r){ return r.da_do_day_binh; });
     if(lastFillRec) daDayCuoi = true;
   }
   var isAccurate = daDayDau && daDayCuoi; // cả 2 đầu đều đổ đầy → chính xác
 
-  // Tổng hợp từ các báo cáo đổ dầu
+  // Brim-to-brim: chỉ tính các lần đổ dầu SAU km_dau (loại trừ lần đổ đầy trước chuyến)
+  // Logic: lần đổ đầy bình trước chuyến (trước km_dau) chỉ là mốc khởi đầu, không phải tiêu hao
+  var calcRows = doDauRows;
+  if(isAccurate && kmDauRec && kmDauRec.created_at){
+    var kmDauTime = new Date(kmDauRec.created_at).getTime();
+    calcRows = doDauRows.filter(function(r){
+      return r.created_at && new Date(r.created_at).getTime() > kmDauTime;
+    });
+  }
+
+  // Tổng hợp từ các báo cáo đổ dầu (chỉ dùng calcRows)
   var tongLit = 0, tongTien = 0, coLit = false, coTien = false;
-  doDauRows.forEach(function(r){
+  calcRows.forEach(function(r){
     if(r.so_lit    != null){ tongLit  += Number(r.so_lit);   coLit  = true; }
     if(r.tong_tien != null){ tongTien += Number(r.tong_tien); coTien = true; }
   });
@@ -3451,9 +3461,12 @@ function renderFuelSummary(rows){
 
   function fmtN(n,dec){ return n!=null ? n.toLocaleString('vi-VN',{maximumFractionDigits:dec||0}) : '—'; }
 
-  // Màu mức tiêu hao: xanh ≥6, cam 4–6, đỏ <4
-  var fuelColor = kmPerLit
-    ? (kmPerLit >= 6 ? 'var(--green)' : kmPerLit >= 4 ? 'var(--orange)' : 'var(--red)')
+  // Mức tiêu hao: L/100km (thấp hơn = tốt hơn)
+  var litPer100Km = (tongKm && tongKm > 0 && coLit && tongLit > 0)
+    ? (tongLit / tongKm * 100) : null;
+  // Màu: xanh ≤20, cam 20–30, đỏ >30 (phù hợp xe 45 chỗ)
+  var fuelColor = litPer100Km
+    ? (litPer100Km <= 20 ? 'var(--green)' : litPer100Km <= 30 ? 'var(--orange)' : 'var(--red)')
     : 'var(--text)';
 
   // Badge độ chính xác
@@ -3461,13 +3474,57 @@ function renderFuelSummary(rows){
     ? '<span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700;margin-left:6px">✅ Chính xác</span>'
     : '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700;margin-left:6px">⚠️ Ước tính</span>';
 
+  // Số lần đổ dầu hiển thị (brim-to-brim chỉ tính trong chuyến)
+  var displayRows = isAccurate ? calcRows : doDauRows;
+  var soLanLabel = displayRows.length + ' lần'
+    + (isAccurate && calcRows.length < doDauRows.length
+       ? ' <span style="font-size:.6rem;color:#6b7280">(trong chuyến)</span>' : '');
+
+  // Bảng chi tiết từng lần đổ dầu (dùng cho toggle)
+  var fillDetailHtml = '<div id="fuel-fill-detail" style="display:none;margin-top:10px;'
+    +'border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:.72rem">'
+    +'<thead><tr style="background:var(--surface2)">'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Thời gian</th>'
+    +'<th style="padding:6px 8px;text-align:right;color:var(--text3);font-weight:600">Số lít</th>'
+    +'<th style="padding:6px 8px;text-align:right;color:var(--text3);font-weight:600">Số tiền</th>'
+    +'<th style="padding:6px 8px;text-align:center;color:var(--text3);font-weight:600">Ghi chú</th>'
+    +'</tr></thead><tbody>';
+
+  // Hiển thị tất cả lần đổ (kể cả lần trước km_dau nếu có, đánh dấu mờ)
+  doDauRows.forEach(function(r, i){
+    var isPreTrip = isAccurate && kmDauRec && kmDauRec.created_at
+      && r.created_at && new Date(r.created_at).getTime() <= new Date(kmDauRec.created_at).getTime();
+    var dt = r.created_at ? new Date(r.created_at) : null;
+    var dtStr = dt ? (dt.getDate().toString().padStart(2,'0')+'/'+(dt.getMonth()+1).toString().padStart(2,'0')
+      +' '+dt.getHours().toString().padStart(2,'0')+':'+dt.getMinutes().toString().padStart(2,'0')) : '—';
+    var rowBg = isPreTrip ? '#f9fafb' : (i%2===0 ? '#fff' : '#fafafa');
+    var rowClr = isPreTrip ? '#9ca3af' : 'var(--text)';
+    var litVal = r.so_lit != null ? fmtN(Number(r.so_lit),1)+' L' : '—';
+    var tienVal = r.tong_tien != null ? fmtM(Number(r.tong_tien)) : '—';
+    var noteVal = '';
+    if(r.da_do_day_binh) noteVal += '🔵 Đầy bình';
+    if(isPreTrip) noteVal += (noteVal?' ':'')+'<span style="color:#9ca3af;font-style:italic">(trước chuyến)</span>';
+    fillDetailHtml += '<tr style="background:'+rowBg+';color:'+rowClr+'">'
+      +'<td style="padding:5px 8px">'+dtStr+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:\'DM Mono\',monospace">'+litVal+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:\'DM Mono\',monospace">'+tienVal+'</td>'
+      +'<td style="padding:5px 8px;text-align:center">'+noteVal+'</td>'
+      +'</tr>';
+  });
+
+  if(doDauRows.length === 0){
+    fillDetailHtml += '<tr><td colspan="4" style="padding:10px;text-align:center;color:var(--text3);font-style:italic">Chưa có báo cáo đổ dầu nào</td></tr>';
+  }
+  fillDetailHtml += '</tbody></table></div>';
+
   var cells = [
     { lbl:'Km đầu',        val: kmDau  ? fmtN(kmDau)+' km'  : '—', ico:'🔢' },
     { lbl:'Km cuối',       val: kmCuoi ? fmtN(kmCuoi)+' km' : '—', ico:'🏁' },
     { lbl:'Tổng KM chạy',  val: tongKm ? fmtN(tongKm)+' km' : '—', ico:'📏', bold:true },
-    { lbl:'Số lần đổ dầu', val: doDauRows.length + ' lần',           ico:'⛽' },
+    { lbl:'Số lần đổ dầu', val: soLanLabel, ico:'⛽', clickable: true },
     { lbl:'Tổng lít tiêu thụ', val: coLit ? fmtN(tongLit,1)+' lít' : '—', ico:'🛢️' },
-    { lbl:'Mức tiêu hao',  val: kmPerLit ? fmtN(kmPerLit,1)+' km/L' : '—',
+    { lbl:'Mức tiêu hao',  val: litPer100Km ? fmtN(litPer100Km,1)+' L/100km' : '—',
       ico:'📊', bold:true, color: fuelColor },
     { lbl:'Chi phí nhiên liệu', val: coTien ? fmtM(tongTien) : '—',
       ico:'💰', span:3, bold:true },
@@ -3482,7 +3539,7 @@ function renderFuelSummary(rows){
   if(!isAccurate){
     html += '<div style="font-size:.7rem;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;'
       +'border-radius:8px;padding:8px 12px;margin-bottom:10px">'
-      +'💡 Để có kết quả chính xác, tài xế cần tick <strong>"Đổ đầy bình"</strong> ở cả báo cáo KM đầu và KM cuối.</div>';
+      +'💡 Để có kết quả chính xác: tài xế cần tick <strong>"Đổ đầy bình"</strong> ở báo cáo KM đầu <em>và</em> tick <strong>"Đây là lần đổ đầy bình"</strong> trong ít nhất một báo cáo đổ dầu cuối chuyến.</div>';
   }
 
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
@@ -3490,12 +3547,24 @@ function renderFuelSummary(rows){
     var spanStyle = c.span ? 'grid-column:span '+c.span+';' : '';
     var clr = c.color || 'var(--text)';
     var fw  = c.bold  ? '700' : '600';
-    html += '<div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;'+spanStyle+'">'
+    var clickStyle = c.clickable
+      ? 'cursor:pointer;user-select:none;transition:background .15s;'
+      : '';
+    var clickAttr = c.clickable
+      ? ' onclick="var d=document.getElementById(\'fuel-fill-detail\');if(d){d.style.display=d.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'.fill-toggle\').textContent=d.style.display===\'none\'?\'▼\':\'▲\'}"'
+      : '';
+    var toggleIcon = c.clickable ? ' <span class="fill-toggle" style="font-size:.6rem;color:var(--text3)">▼</span>' : '';
+    html += '<div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;'+spanStyle+clickStyle+'"'
+      + clickAttr + '>'
       +'<div style="font-size:.62rem;color:var(--text3);margin-bottom:3px">'+c.ico+' '+c.lbl+'</div>'
-      +'<div style="font-size:.85rem;font-weight:'+fw+';color:'+clr+';font-family:\'DM Mono\',monospace">'+c.val+'</div>'
+      +'<div style="font-size:.85rem;font-weight:'+fw+';color:'+clr+';font-family:\'DM Mono\',monospace">'
+      +c.val + toggleIcon
+      +'</div>'
       +'</div>';
   });
-  html += '</div></div>';
+  html += '</div>';
+  html += fillDetailHtml;
+  html += '</div>';
 
   el.innerHTML = html;
   el.style.display = 'block';
