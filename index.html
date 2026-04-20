@@ -296,6 +296,10 @@ ALTER TABLE xe ADD COLUMN IF NOT EXISTS km_thay_nhot integer;
 -- Thêm cột mật khẩu đăng nhập cho tài xế (nếu chưa có)
 ALTER TABLE tai_xe ADD COLUMN IF NOT EXISTS mat_khau text;
 
+-- Định mức tiêu hao & giá dầu tham chiếu cho từng xe (nếu chưa có)
+ALTER TABLE xe ADD COLUMN IF NOT EXISTS dinh_muc_l100km numeric(5,1);
+ALTER TABLE xe ADD COLUMN IF NOT EXISTS gia_dau_tk      integer;
+
 -- Index để query nhanh theo biển số
 CREATE INDEX IF NOT EXISTS idx_bd_bien_so ON bao_duong_lich_su(bien_so_xe);
 CREATE INDEX IF NOT EXISTS idx_bd_loai    ON bao_duong_lich_su(loai);</pre>

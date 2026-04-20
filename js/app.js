@@ -181,7 +181,7 @@ function calcDuration(ngay_di,ngay_ve){
   return (nights+1)+'N'+nights+'D';
 }
 function mapTC(r){return{id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',gio:r.gio_gd||'00:00',sotien:Number(r.so_tien)||0,hd:r.hd_so||'',hd_id:r.hd_id||null,httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',kh:r.doi_tac||'',mota:r.mo_ta||''};}
-function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',kmThayNhot:r.km_thay_nhot!=null?Number(r.km_thay_nhot):null,dungTichBinh:r.dung_tich_binh!=null?Number(r.dung_tich_binh):null,tt:r.trang_thai||'san_sang'};}
+function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',kmThayNhot:r.km_thay_nhot!=null?Number(r.km_thay_nhot):null,dungTichBinh:r.dung_tich_binh!=null?Number(r.dung_tich_binh):null,dinhMuc:r.dinh_muc_l100km!=null?Number(r.dinh_muc_l100km):null,giaDauTK:r.gia_dau_tk!=null?Number(r.gia_dau_tk):null,tt:r.trang_thai||'san_sang'};}
 function mapTX(r){return{id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',ngaySinh:r.ngay_sinh||'',sdt:r.so_dt||'',luong:Number(r.luong_cb)||0,chuyen:0,doanhThu:0};}
 function mapKH(r){return{id:r.id,maKH:r.ma_kh||'',ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',diaChi:r.dia_chi||'',hdCount:0,doanhSo:0};}
 // Sinh mã KH tiếp theo: KH-001, KH-002, ...
@@ -966,7 +966,8 @@ function openHDDetail(id) {
       results.forEach(function(rows){ rows.forEach(function(r){ if(!seen[r.id]){ seen[r.id]=true; combined.push(r); } }); });
       combined.sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
       renderBaoCaoSection(combined, h.taixe);
-      renderFuelSummary(combined); // ← hiển thị tóm tắt nhiên liệu
+      var xeObj = h.xe ? DB.xe.find(function(v){ return v.bien === h.xe; }) : null;
+      renderFuelSummary(combined, xeObj); // ← hiển thị tóm tắt nhiên liệu
     });
   })();
 }
@@ -1394,6 +1395,9 @@ function openXeModal(id){
     '<div class="form-row"><div class="fg"><label class="fl">Hạn đăng kiểm</label><input type="date" class="fc" id="xf-dk" value="'+(x.dangKiem||'')+'"></div><div class="fg"><label class="fl">Hạn bảo hiểm</label><input type="date" class="fc" id="xf-bh" value="'+(x.baoHiem||'')+'"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Km thay nhớt gần nhất</label><input type="text" inputmode="numeric" class="fc" id="xf-nhot" value="'+(x.kmThayNhot!=null?fmt(x.kmThayNhot):'')+'" placeholder="VD: 45000" oninput="fmtInput(this)"></div><div class="fg" style="display:flex;align-items:flex-end;padding-bottom:2px"><span style="font-size:.72rem;color:var(--text3)">Hạn thay nhớt tiếp theo = Km trên + 10.000 km</span></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Dung tích bình dầu (lít)</label><input type="number" class="fc" id="xf-binh" value="'+(x.dungTichBinh||'')+'" placeholder="VD: 200 (xe 45 chỗ)"></div><div class="fg" style="display:flex;align-items:flex-end;padding-bottom:2px"><span style="font-size:.72rem;color:var(--text3)">Dùng để tính mức dầu còn lại ước tính sau mỗi chuyến</span></div></div>'+
+    '<div style="border-top:1px solid var(--border);margin:8px 0 10px;padding-top:10px"><div style="font-size:.72rem;font-weight:700;color:var(--text2);margin-bottom:8px">⛽ Định mức & giá dầu tham chiếu</div></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Định mức tiêu hao <span style="font-size:.68rem;color:var(--text3)">(L/100km)</span></label><input type="number" step="0.1" class="fc" id="xf-dinhmuc" value="'+(x.dinhMuc||'')+'" placeholder="VD: 25 (xe 45 chỗ)"></div><div class="fg"><label class="fl">Giá dầu tham chiếu <span style="font-size:.68rem;color:var(--text3)">(đ/lít)</span></label><input type="text" inputmode="numeric" class="fc" id="xf-giadau" value="'+(x.giaDauTK?fmt(x.giaDauTK):'')+'" placeholder="VD: 22.000" oninput="fmtInput(this)"></div></div>'+
+    '<div style="font-size:.7rem;color:var(--text3);margin-bottom:10px">💡 Dùng để ước tính chi phí nhiên liệu khi tài xế không báo cáo đổ dầu trong chuyến</div>'+
     '<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="xf-tt">'+ttOpts+'</select></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveXe(\''+(id||'')+'\')">💾 Lưu</button>');
 }
@@ -1403,8 +1407,10 @@ function saveXe(id){
   if(!bien||!loai){toast('Nhập biển số và loại xe!','error');return;}
   var kmNhotRaw=readMoney('xf-nhot');
   var binhRaw=parseInt((document.getElementById('xf-binh')||{}).value)||null;
-  var obj={id:id||uid(),bien:bien,loai:loai,nam:parseInt(document.getElementById('xf-nam').value)||2020,km:readMoney('xf-km'),dangKiem:document.getElementById('xf-dk').value,baoHiem:document.getElementById('xf-bh').value,kmThayNhot:kmNhotRaw||null,dungTichBinh:binhRaw,tt:document.getElementById('xf-tt').value};
-  var row={bien_so:bien,loai_xe:loai,nam_sx:obj.nam,km_chay:obj.km,han_dk:obj.dangKiem||null,han_bh:obj.baoHiem||null,km_thay_nhot:obj.kmThayNhot,dung_tich_binh:obj.dungTichBinh,trang_thai:obj.tt};
+  var dinhMucRaw=parseFloat((document.getElementById('xf-dinhmuc')||{}).value)||null;
+  var giaDauRaw=readMoney('xf-giadau')||null;
+  var obj={id:id||uid(),bien:bien,loai:loai,nam:parseInt(document.getElementById('xf-nam').value)||2020,km:readMoney('xf-km'),dangKiem:document.getElementById('xf-dk').value,baoHiem:document.getElementById('xf-bh').value,kmThayNhot:kmNhotRaw||null,dungTichBinh:binhRaw,dinhMuc:dinhMucRaw,giaDauTK:giaDauRaw,tt:document.getElementById('xf-tt').value};
+  var row={bien_so:bien,loai_xe:loai,nam_sx:obj.nam,km_chay:obj.km,han_dk:obj.dangKiem||null,han_bh:obj.baoHiem||null,km_thay_nhot:obj.kmThayNhot,dung_tich_binh:obj.dungTichBinh,dinh_muc_l100km:obj.dinhMuc,gia_dau_tk:obj.giaDauTK,trang_thai:obj.tt};
   (id?sbPatch('xe',id,row):sbPost('xe',row)).then(function(res){
     if(id)DB.xe=DB.xe.map(function(x){return x.id===id?obj:x;});
     else{if(res&&res[0]&&res[0].id)obj.id=res[0].id;DB.xe.push(obj);}
@@ -3415,7 +3421,7 @@ var BC_LOAI_LABEL={
 };
 
 // ─── Tóm tắt nhiên liệu cho chi tiết HĐ ────────────────────────────────────
-function renderFuelSummary(rows){
+function renderFuelSummary(rows, xe){
   var el = document.getElementById('fuel-summary');
   if(!el) return;
 
@@ -3461,24 +3467,56 @@ function renderFuelSummary(rows){
 
   function fmtN(n,dec){ return n!=null ? n.toLocaleString('vi-VN',{maximumFractionDigits:dec||0}) : '—'; }
 
+  // ── Chế độ tính toán ────────────────────────────────────────────────────
+  // 3 chế độ: 'accurate' | 'estimated' | 'standard_rate'
+  var calcMode;
+  if(isAccurate && coLit){
+    calcMode = 'accurate';      // brim-to-brim đầy đủ
+  } else if(coLit){
+    calcMode = 'estimated';     // có dữ liệu đổ nhưng không đủ brim-to-brim
+  } else if(tongKm && tongKm > 0 && xe && xe.dinhMuc){
+    calcMode = 'standard_rate'; // không có đổ dầu → tính theo định mức xe
+  } else {
+    calcMode = 'estimated';     // chỉ có km, không có gì để tính
+  }
+
+  // Chế độ định mức: tính lại tongLit và tongTien từ định mức xe
+  var dinhMucNote = '';
+  if(calcMode === 'standard_rate'){
+    tongLit  = Math.round(tongKm * xe.dinhMuc / 100 * 10) / 10; // làm tròn 1 chữ số
+    coLit    = true;
+    if(xe.giaDauTK){
+      tongTien = Math.round(tongLit * xe.giaDauTK);
+      coTien   = true;
+      dinhMucNote = 'Định mức '+xe.dinhMuc+' L/100km × '+fmtM(xe.giaDauTK)+'/lít';
+    } else {
+      dinhMucNote = 'Định mức '+xe.dinhMuc+' L/100km — chưa nhập giá dầu tham chiếu';
+    }
+  }
+
   // Mức tiêu hao: L/100km (thấp hơn = tốt hơn)
   var litPer100Km = (tongKm && tongKm > 0 && coLit && tongLit > 0)
-    ? (tongLit / tongKm * 100) : null;
+    ? (calcMode === 'standard_rate' ? xe.dinhMuc : tongLit / tongKm * 100)
+    : null;
   // Màu: xanh ≤20, cam 20–30, đỏ >30 (phù hợp xe 45 chỗ)
   var fuelColor = litPer100Km
     ? (litPer100Km <= 20 ? 'var(--green)' : litPer100Km <= 30 ? 'var(--orange)' : 'var(--red)')
     : 'var(--text)';
 
   // Badge độ chính xác
-  var accuracyBadge = isAccurate
+  var accuracyBadge = calcMode === 'accurate'
     ? '<span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700;margin-left:6px">✅ Chính xác</span>'
-    : '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700;margin-left:6px">⚠️ Ước tính</span>';
+    : calcMode === 'standard_rate'
+      ? '<span style="background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700;margin-left:6px">📊 Theo định mức</span>'
+      : '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700;margin-left:6px">⚠️ Ước tính</span>';
 
   // Số lần đổ dầu hiển thị (brim-to-brim chỉ tính trong chuyến)
   var displayRows = isAccurate ? calcRows : doDauRows;
-  var soLanLabel = displayRows.length + ' lần'
-    + (isAccurate && calcRows.length < doDauRows.length
-       ? ' <span style="font-size:.6rem;color:#6b7280">(trong chuyến)</span>' : '');
+  var soLanLabel = calcMode === 'standard_rate'
+    ? '<span style="color:#6b7280;font-style:italic">—</span>'
+    : displayRows.length + ' lần'
+      + (isAccurate && calcRows.length < doDauRows.length
+         ? ' <span style="font-size:.6rem;color:#6b7280">(trong chuyến)</span>' : '');
 
   // Bảng chi tiết từng lần đổ dầu (dùng cho toggle)
   var fillDetailHtml = '<div id="fuel-fill-detail" style="display:none;margin-top:10px;'
@@ -3536,7 +3574,13 @@ function renderFuelSummary(rows){
     + accuracyBadge
     +'</div>';
 
-  if(!isAccurate){
+  if(calcMode === 'standard_rate'){
+    html += '<div style="font-size:.7rem;color:#1d4ed8;background:#eff6ff;border:1px solid #93c5fd;'
+      +'border-radius:8px;padding:8px 12px;margin-bottom:10px">'
+      +'📊 <strong>Tính theo định mức:</strong> Không có dữ liệu đổ dầu trong chuyến. '
+      + (dinhMucNote ? 'Áp dụng: '+dinhMucNote+'.' : '')
+      +' Để có số liệu thực tế, tài xế báo cáo đổ dầu và tick <strong>"Đây là lần đổ đầy bình"</strong>.</div>';
+  } else if(calcMode === 'estimated'){
     html += '<div style="font-size:.7rem;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;'
       +'border-radius:8px;padding:8px 12px;margin-bottom:10px">'
       +'💡 Để có kết quả chính xác: tài xế cần tick <strong>"Đổ đầy bình"</strong> ở báo cáo KM đầu <em>và</em> tick <strong>"Đây là lần đổ đầy bình"</strong> trong ít nhất một báo cáo đổ dầu cuối chuyến.</div>';
