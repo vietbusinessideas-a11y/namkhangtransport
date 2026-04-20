@@ -280,6 +280,21 @@ function autoTransitionHD(){
   });
 }
 
+// ─── Overlay cảnh báo HĐ quá hạn — tách biệt, không bị đóng khi xem chi tiết HĐ ─
+function showOverdueAdmin(title, sub, body, footer){
+  var el = document.getElementById('overdue-admin-modal');
+  if(!el) return;
+  document.getElementById('overdue-modal-title').textContent = title;
+  document.getElementById('overdue-modal-sub').textContent = sub;
+  document.getElementById('overdue-modal-body').innerHTML = body;
+  document.getElementById('overdue-modal-footer').innerHTML = footer;
+  el.style.display = 'flex';
+}
+function closeOverdueAdmin(){
+  var el = document.getElementById('overdue-admin-modal');
+  if(el) el.style.display = 'none';
+}
+
 // ─── Kiểm tra HĐ quá hạn chưa báo cáo hoàn thành → cảnh báo admin ─────────
 async function checkOverdueHDAdmin(){
   if(!SB_URL || !SB_KEY) return;
@@ -306,10 +321,11 @@ async function checkOverdueHDAdmin(){
   if(!overdue.length) return;
 
   // Build danh sách HTML
+  // onclick chỉ gọi openHDDetail — KHÔNG closeModal() để overlay này vẫn còn sau khi đóng chi tiết HĐ
   var rows = overdue.map(function(h){
     var daysPast = Math.round((new Date(todayStr) - new Date(h.ngay_ve)) / 864e5);
     var pastLabel = daysPast === 1 ? '1 ngày' : daysPast + ' ngày';
-    return '<tr onclick="closeModal();setTimeout(function(){openHDDetail(\''+h.id+'\')},120)" '
+    return '<tr onclick="openHDDetail(\''+h.id+'\')" '
       +'style="cursor:pointer" title="Xem chi tiết">'
       +'<td><span class="mono" style="color:var(--blue);font-weight:700">'+h.so+'</span></td>'
       +'<td style="font-weight:500">'+h.kh+'</td>'
@@ -337,11 +353,11 @@ async function checkOverdueHDAdmin(){
     +'<tbody>'+rows+'</tbody>'
     +'</table></div>';
 
-  showModal(
+  showOverdueAdmin(
     '🚨 Cảnh báo hợp đồng quá hạn',
     'Phát hiện lúc đăng nhập · ' + new Date().toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'}),
     body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Đã biết, đóng lại</button>'
+    '<button class="btn btn-ghost" onclick="closeOverdueAdmin()">Đã biết, đóng lại</button>'
   );
 }
 
