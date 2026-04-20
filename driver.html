@@ -1472,20 +1472,22 @@ function driverFmtDate(str){
 
 function loadXeInfo(bienXe){
   if(!bienXe||bienXe==='—'||!SB_URL||!SB_KEY) return;
-  // Thử lấy cả km_thay_nhot — nếu cột chưa có thì fallback select cơ bản
-  sbGet('xe','select=bien_so,loai_xe,km_chay,han_dk,han_bh,km_thay_nhot&bien_so=eq.'+encodeURIComponent(bienXe)+'&limit=1')
+  // Thử lấy đầy đủ — nếu cột mới chưa có thì fallback select cơ bản
+  sbGet('xe','select=bien_so,loai_xe,km_chay,han_dk,han_bh,km_thay_nhot,dung_tich_binh&bien_so=eq.'+encodeURIComponent(bienXe)+'&limit=1')
     .then(function(rows){
       if(!rows||!rows.length) return;
       XE_INFO_CACHE=rows[0];
       renderXeInfoCard(rows[0]);
+      loadDriverFuelBar(bienXe, rows[0].dung_tich_binh!=null ? Number(rows[0].dung_tich_binh) : null);
     })
     .catch(function(){
-      // Fallback nếu cột km_thay_nhot chưa tồn tại
-      sbGet('xe','select=bien_so,loai_xe,km_chay,han_dk,han_bh&bien_so=eq.'+encodeURIComponent(bienXe)+'&limit=1')
+      // Fallback nếu cột mới chưa tồn tại
+      sbGet('xe','select=bien_so,loai_xe,km_chay,han_dk,han_bh,km_thay_nhot&bien_so=eq.'+encodeURIComponent(bienXe)+'&limit=1')
         .then(function(rows2){
           if(!rows2||!rows2.length) return;
           XE_INFO_CACHE=rows2[0];
           renderXeInfoCard(rows2[0]);
+          loadDriverFuelBar(bienXe, null);
         })
         .catch(function(e){ console.warn('[NK] loadXeInfo:',e.message); });
     });
@@ -1525,7 +1527,7 @@ function renderXeInfoCard(x){
       +'<div style="font-size:.58rem;color:#a09c96;margin-top:1px">đến '+nextNhot.toLocaleString('vi-VN')+' km</div>';
   }
   el.innerHTML='<div class="card" style="padding:12px 14px">'
-    +'<div style="font-size:.64rem;font-weight:700;color:#a09c96;letter-spacing:.6px;margin-bottom:10px">🚌 XE '+x.bien_so+' · '+( x.loai_xe||'')+'</div>'
+    +'<div style="font-size:.64rem;font-weight:700;color:#a09c96;letter-spacing:.6px;margin-bottom:10px">🚌 XE '+x.bien_so+' · '+(x.loai_xe||'')+'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
       +'<div class="xe-info-item">'
         +'<div class="xe-info-lbl">ĐĂNG KIỂM</div>'
@@ -1539,12 +1541,76 @@ function renderXeInfoCard(x){
       +'</div>'
       +'<div class="xe-info-item">'
         +'<div class="xe-info-lbl">THAY NHỚT</div>'
-        +'<div class="xe-info-date" style="font-size:.64rem">lần cuối:<br>'+( kmNhot!=null ? kmNhot.toLocaleString('vi-VN')+' km' : '—')+'</div>'
+        +'<div class="xe-info-date" style="font-size:.64rem">lần cuối:<br>'+(kmNhot!=null?kmNhot.toLocaleString('vi-VN')+' km':'—')+'</div>'
         +oilBadge
       +'</div>'
     +'</div>'
+    +'<div id="driver-fuel-bar"></div>'   // ← placeholder thanh nhiên liệu
   +'</div>';
   sec.style.display='block';
+}
+
+function loadDriverFuelBar(bienXe, dungTichBinh){
+  if(!bienXe||!SB_URL||!SB_KEY) return;
+  var bienEnc=encodeURIComponent(bienXe);
+  Promise.all([
+    sbGet('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_cuoi&so_km=not.is.null&select=so_km,hd_so,created_at&order=created_at.desc&limit=1'),
+    sbGet('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_dau&so_km=not.is.null&select=so_km,hd_so,created_at&order=created_at.desc&limit=3'),
+    sbGet('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.do_dau&select=so_lit,tong_tien,da_do_day_binh,hd_so,created_at&order=created_at.desc&limit=20'),
+  ]).then(function(res){
+    var el=document.getElementById('driver-fuel-bar');
+    if(!el) return;
+    var cuoiRows=res[0]||[], dauRows=res[1]||[], fillRows=res[2]||[];
+    if(!cuoiRows.length){ el.innerHTML=''; return; }
+
+    var lastCuoi=cuoiRows[0];
+    var hdSo=lastCuoi.hd_so;
+    var kmCuoi=Number(lastCuoi.so_km);
+    var cuoiDate=lastCuoi.created_at?lastCuoi.created_at.slice(0,10):'';
+
+    // Km đầu của cùng chuyến
+    var kmDauRec=hdSo ? dauRows.find(function(r){return r.hd_so===hdSo;})
+                      : dauRows.find(function(r){return r.created_at<lastCuoi.created_at;});
+    var tongKm=kmDauRec ? kmCuoi-Number(kmDauRec.so_km) : null;
+
+    // Đổ dầu của chuyến
+    var tripFills=hdSo ? fillRows.filter(function(r){return r.hd_so===hdSo;}) : [];
+    var tongLit=0; var coLit=false;
+    tripFills.forEach(function(r){ if(r.so_lit!=null){tongLit+=Number(r.so_lit);coLit=true;} });
+
+    var endedFull=!!(tripFills.find(function(r){return r.da_do_day_binh;}) ||
+                    fillRows.find(function(r){return r.da_do_day_binh && r.hd_so===hdSo;}));
+    var avgKmPerLit=(tongKm&&coLit&&tongLit>0) ? tongKm/tongLit : null;
+
+    // Ước tính % còn lại
+    var pct=null, conLai=null;
+    if(endedFull && dungTichBinh){ pct=100; conLai=dungTichBinh; }
+    else if(dungTichBinh && coLit){
+      conLai=Math.max(0, dungTichBinh-tongLit);
+      pct=Math.round(conLai/dungTichBinh*100);
+    }
+    if(pct===null){ el.innerHTML=''; return; } // không đủ dữ liệu → ẩn
+
+    var barColor=pct>=50?'#16a34a':pct>=25?'#f97316':'#dc2626';
+    var dateLabel=cuoiDate?(function(){
+      var p=cuoiDate.split('-'); return p[2]+'/'+p[1]+'/'+p[0];
+    })():'';
+
+    el.innerHTML='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ede8">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
+      +'<span style="font-size:.64rem;font-weight:700;color:#a09c96;letter-spacing:.5px">⛽ NHIÊN LIỆU ƯỚC TÍNH</span>'
+      +'<span style="font-size:.68rem;color:#a09c96">Sau chuyến '+dateLabel+'</span>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:10px">'
+      +'<div style="flex:1;background:#f0ede8;border-radius:20px;height:12px;overflow:hidden">'
+      +'<div style="width:'+pct+'%;height:100%;background:'+barColor+';border-radius:20px;transition:width .6s ease"></div>'
+      +'</div>'
+      +'<span style="font-size:.8rem;font-weight:800;color:'+barColor+';min-width:36px;text-align:right">'+pct+'%</span>'
+      +'</div>'
+      +(conLai!=null?'<div style="font-size:.64rem;color:#a09c96;margin-top:3px;text-align:right">~'+Math.round(conLai)+' lít / '+dungTichBinh+' lít</div>':'')
+      +(endedFull?'<div style="font-size:.62rem;color:#16a34a;margin-top:2px">✅ Đã đổ đầy bình sau chuyến gần nhất</div>':'')
+      +'</div>';
+  }).catch(function(e){ console.warn('[NK] loadDriverFuelBar:',e.message); });
 }
 
 function setReportButtons(hasDangChay, hasChoXe){

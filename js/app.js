@@ -181,7 +181,7 @@ function calcDuration(ngay_di,ngay_ve){
   return (nights+1)+'N'+nights+'D';
 }
 function mapTC(r){return{id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',gio:r.gio_gd||'00:00',sotien:Number(r.so_tien)||0,hd:r.hd_so||'',hd_id:r.hd_id||null,httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',kh:r.doi_tac||'',mota:r.mo_ta||''};}
-function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',kmThayNhot:r.km_thay_nhot!=null?Number(r.km_thay_nhot):null,tt:r.trang_thai||'san_sang'};}
+function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',kmThayNhot:r.km_thay_nhot!=null?Number(r.km_thay_nhot):null,dungTichBinh:r.dung_tich_binh!=null?Number(r.dung_tich_binh):null,tt:r.trang_thai||'san_sang'};}
 function mapTX(r){return{id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',ngaySinh:r.ngay_sinh||'',sdt:r.so_dt||'',luong:Number(r.luong_cb)||0,chuyen:0,doanhThu:0};}
 function mapKH(r){return{id:r.id,maKH:r.ma_kh||'',ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',diaChi:r.dia_chi||'',hdCount:0,doanhSo:0};}
 // Sinh mã KH tiếp theo: KH-001, KH-002, ...
@@ -1276,6 +1276,7 @@ function openXeModal(id){
     '<div class="form-row"><div class="fg"><label class="fl">Năm sản xuất</label><input type="number" class="fc" id="xf-nam" value="'+(x.nam||2020)+'"></div><div class="fg"><label class="fl">Km đã chạy</label><input type="text" inputmode="numeric" class="fc" id="xf-km" value="'+(x.km?fmt(x.km):'')+'" placeholder="0" oninput="fmtInput(this)"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Hạn đăng kiểm</label><input type="date" class="fc" id="xf-dk" value="'+(x.dangKiem||'')+'"></div><div class="fg"><label class="fl">Hạn bảo hiểm</label><input type="date" class="fc" id="xf-bh" value="'+(x.baoHiem||'')+'"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Km thay nhớt gần nhất</label><input type="text" inputmode="numeric" class="fc" id="xf-nhot" value="'+(x.kmThayNhot!=null?fmt(x.kmThayNhot):'')+'" placeholder="VD: 45000" oninput="fmtInput(this)"></div><div class="fg" style="display:flex;align-items:flex-end;padding-bottom:2px"><span style="font-size:.72rem;color:var(--text3)">Hạn thay nhớt tiếp theo = Km trên + 10.000 km</span></div></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Dung tích bình dầu (lít)</label><input type="number" class="fc" id="xf-binh" value="'+(x.dungTichBinh||'')+'" placeholder="VD: 200 (xe 45 chỗ)"></div><div class="fg" style="display:flex;align-items:flex-end;padding-bottom:2px"><span style="font-size:.72rem;color:var(--text3)">Dùng để tính mức dầu còn lại ước tính sau mỗi chuyến</span></div></div>'+
     '<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="xf-tt">'+ttOpts+'</select></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveXe(\''+(id||'')+'\')">💾 Lưu</button>');
 }
@@ -1284,8 +1285,9 @@ function saveXe(id){
   var bien=document.getElementById('xf-bien').value.trim(),loai=document.getElementById('xf-loai').value.trim();
   if(!bien||!loai){toast('Nhập biển số và loại xe!','error');return;}
   var kmNhotRaw=readMoney('xf-nhot');
-  var obj={id:id||uid(),bien:bien,loai:loai,nam:parseInt(document.getElementById('xf-nam').value)||2020,km:readMoney('xf-km'),dangKiem:document.getElementById('xf-dk').value,baoHiem:document.getElementById('xf-bh').value,kmThayNhot:kmNhotRaw||null,tt:document.getElementById('xf-tt').value};
-  var row={bien_so:bien,loai_xe:loai,nam_sx:obj.nam,km_chay:obj.km,han_dk:obj.dangKiem||null,han_bh:obj.baoHiem||null,km_thay_nhot:obj.kmThayNhot,trang_thai:obj.tt};
+  var binhRaw=parseInt((document.getElementById('xf-binh')||{}).value)||null;
+  var obj={id:id||uid(),bien:bien,loai:loai,nam:parseInt(document.getElementById('xf-nam').value)||2020,km:readMoney('xf-km'),dangKiem:document.getElementById('xf-dk').value,baoHiem:document.getElementById('xf-bh').value,kmThayNhot:kmNhotRaw||null,dungTichBinh:binhRaw,tt:document.getElementById('xf-tt').value};
+  var row={bien_so:bien,loai_xe:loai,nam_sx:obj.nam,km_chay:obj.km,han_dk:obj.dangKiem||null,han_bh:obj.baoHiem||null,km_thay_nhot:obj.kmThayNhot,dung_tich_binh:obj.dungTichBinh,trang_thai:obj.tt};
   (id?sbPatch('xe',id,row):sbPost('xe',row)).then(function(res){
     if(id)DB.xe=DB.xe.map(function(x){return x.id===id?obj:x;});
     else{if(res&&res[0]&&res[0].id)obj.id=res[0].id;DB.xe.push(obj);}
@@ -2751,6 +2753,8 @@ function openXeDetail(id){
   ];
   var body='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'+infoRows.map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:10px"><div style="font-size:.6rem;color:var(--text3);margin-bottom:3px">'+p[0]+'</div><div style="font-size:.78rem;font-weight:600">'+p[1]+'</div></div>';}).join('')+'</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px">'+[['💰 Tổng doanh thu','<span class="amt-pos">+'+fmtM(totalRev)+'</span>'],['💸 Tổng chi phí','<span class="amt-neg">-'+fmtM(totalChi)+'</span>'],['📋 Số HĐ',hdList.length+' hợp đồng']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.68rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace">'+p[1]+'</div></div>';}).join('')+'</div>'+
+    // ── Tình trạng nhiên liệu ──
+    '<div id="xe-fuel-status" style="margin-bottom:18px"><div style="font-size:.78rem;color:var(--text3);padding:10px 0">⏳ Đang tải tình trạng nhiên liệu...</div></div>'+
     // ── Lịch sử bảo dưỡng ──
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
       +'<div style="font-weight:700;font-size:.82rem">🔧 Lịch sử bảo dưỡng</div>'
@@ -2761,11 +2765,150 @@ function openXeDetail(id){
     '<div style="font-weight:700;font-size:.82rem;margin-bottom:8px">📋 Lịch sử hợp đồng</div>'+
     '<div class="table-wrap"><table class="dt" style="min-width:480px"><thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến</th><th>Ngày</th><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>'+(hdList.length?hdList.map(function(h){return'<tr onclick="closeModal();setTimeout(function(){openHDDetail(\''+h.id+'\')},120)" style="cursor:pointer" title="Xem chi tiết HĐ '+h.so+'"><td><span class="mono" style="color:var(--blue)">'+h.so+'</span></td><td>'+h.kh+'</td><td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td><td><span class="mono">'+fmtD(h.ngay)+'</span></td><td><span class="amt-pos">+'+fmtM(h.giatri)+'</span></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Chưa có hợp đồng</td></tr>')+'</tbody></table></div>';
   showModal('Chi tiết Xe','Biển số: '+x.bien,body,'<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'+(isAdmin()?'<button class="btn btn-ghost" onclick="openBaoDuongModal(\''+x.bien+'\')">🔧 Ghi bảo dưỡng</button>':'')+'<button class="btn btn-green" onclick="closeModal();exportXeReport(\''+id+'\')">📥 Xuất BC</button>');
-  // Async load bảo dưỡng history + km stats
+  // Async load bảo dưỡng history + km stats + fuel status
   loadBaoDuongHistory(x.bien);
+  loadFuelStatus(x.bien, x.dungTichBinh);
 
   // ── Async: tính tổng km từ bao_cao (km_cuoi - km_dau theo từng HĐ) ──────
   loadXeKmStats(x.km, x.bien, hdDone.length);
+}
+
+// ─── Tình trạng nhiên liệu sau chuyến gần nhất ──────────────────────────────
+function loadFuelStatus(bienSo, dungTichBinh){
+  var el = document.getElementById('xe-fuel-status');
+  if(!el) return;
+
+  if(!SB_URL || !SB_KEY){
+    el.innerHTML = '';
+    return;
+  }
+
+  var bienEnc = encodeURIComponent(bienSo);
+
+  // Fetch: km_cuoi, km_dau, do_dau gần nhất cho xe này
+  Promise.all([
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_cuoi&so_km=not.is.null&select=so_km,hd_so,created_at&order=created_at.desc&limit=1'),
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_dau&so_km=not.is.null&select=so_km,hd_so,created_at&order=created_at.desc&limit=5'),
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.do_dau&select=so_lit,tong_tien,da_do_day_binh,hd_so,created_at&order=created_at.desc&limit=20'),
+  ]).then(function(res){
+    var cuoiRows = res[0] || [];
+    var dauRows  = res[1] || [];
+    var fillRows = res[2] || [];
+
+    if(!cuoiRows.length){ el.innerHTML = ''; return; }
+
+    var lastCuoi = cuoiRows[0];
+    var hdSo     = lastCuoi.hd_so;
+    var kmCuoi   = Number(lastCuoi.so_km);
+    var cuoiDate = lastCuoi.created_at ? lastCuoi.created_at.slice(0,10) : '';
+
+    // Tìm km_dau của cùng chuyến (cùng hd_so, hoặc gần nhất trước km_cuoi)
+    var kmDauRec = hdSo
+      ? dauRows.find(function(r){ return r.hd_so === hdSo; })
+      : dauRows.find(function(r){ return r.created_at < lastCuoi.created_at; });
+    var kmDau    = kmDauRec ? Number(kmDauRec.so_km) : null;
+    var tongKm   = (kmDau != null) ? (kmCuoi - kmDau) : null;
+
+    // Báo cáo đổ dầu của chuyến này
+    var tripFills = hdSo
+      ? fillRows.filter(function(r){ return r.hd_so === hdSo; })
+      : [];
+    var tongLit = 0, tongTienF = 0, coLit = false, coTien = false;
+    tripFills.forEach(function(r){
+      if(r.so_lit    != null){ tongLit   += Number(r.so_lit);   coLit  = true; }
+      if(r.tong_tien != null){ tongTienF += Number(r.tong_tien); coTien = true; }
+    });
+
+    // Tiêu thụ ước tính = tổng KM / trung bình km/L (lấy từ toàn bộ lịch sử nếu thiếu)
+    var consumed = coLit ? tongLit : null;
+
+    // Tìm lần đổ đầy bình gần nhất (da_do_day_binh = true)
+    var lastFullFill = fillRows.find(function(r){ return r.da_do_day_binh; });
+    var endedFull    = lastFullFill && lastFullFill.hd_so === hdSo;
+
+    // Tính km/L trung bình từ lịch sử (nếu có đủ dữ liệu)
+    var avgKmPerLit = null;
+    if(tongKm && consumed && consumed > 0) avgKmPerLit = tongKm / consumed;
+
+    // Ước tính dầu còn lại
+    var conLai = null, pct = null;
+    if(endedFull && dungTichBinh){
+      conLai = dungTichBinh; pct = 100; // vừa đổ đầy
+    } else if(dungTichBinh && lastFullFill && avgKmPerLit){
+      // Km đã chạy kể từ lần đổ đầy gần nhất
+      var kmSinceFullFill = tongKm || 0;
+      var usedSince = kmSinceFullFill / avgKmPerLit;
+      conLai = Math.max(0, dungTichBinh - usedSince);
+      pct    = Math.round(conLai / dungTichBinh * 100);
+    } else if(dungTichBinh && consumed != null){
+      // Fallback: dùng trực tiếp consumed
+      conLai = Math.max(0, dungTichBinh - consumed);
+      pct    = Math.round(conLai / dungTichBinh * 100);
+    }
+
+    // Màu thanh nhiên liệu
+    var barColor = pct == null ? '#94a3b8'
+      : pct >= 50 ? '#16a34a' : pct >= 25 ? '#f97316' : '#dc2626';
+
+    function fmtN(n,d){ return n!=null?n.toLocaleString('vi-VN',{maximumFractionDigits:d||0}):'—'; }
+
+    var hdLabel = hdSo ? (' · <span style="color:var(--blue);font-weight:700">'+hdSo+'</span>') : '';
+    var dateLabel = cuoiDate ? fmtD(cuoiDate) : '';
+
+    // Thanh % nhiên liệu
+    var barHTML = '';
+    if(pct != null){
+      barHTML = '<div style="margin:10px 0 4px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:.68rem;color:var(--text3);margin-bottom:4px">'
+        +'<span>Mức dầu ước tính</span>'
+        +'<span style="font-weight:700;color:'+barColor+'">'+pct+'% · ~'+fmtN(conLai,0)+' lít</span>'
+        +'</div>'
+        +'<div style="background:var(--surface2);border-radius:20px;height:10px;overflow:hidden">'
+        +'<div style="width:'+pct+'%;height:100%;background:'+barColor+';border-radius:20px;transition:width .6s ease"></div>'
+        +'</div>'
+        +'</div>';
+    }
+
+    var endLabel = endedFull
+      ? '<span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:20px;padding:2px 8px;font-size:.68rem;font-weight:700">✅ Đã đổ đầy</span>'
+      : '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:2px 8px;font-size:.68rem;font-weight:700">⚠️ Chưa đổ đầy</span>';
+
+    var consumeRow = (tongKm || consumed)
+      ? '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">'
+        +[
+          ['📏 KM chuyến', tongKm ? fmtN(tongKm)+' km' : '—'],
+          ['🛢️ Đã đổ', coLit ? fmtN(tongLit,1)+' lít' : '—'],
+          ['📊 Tiêu hao', avgKmPerLit ? fmtN(avgKmPerLit,1)+' km/L' : '—'],
+        ].map(function(p){
+          return '<div style="background:var(--surface2);border-radius:8px;padding:8px;text-align:center">'
+            +'<div style="font-size:.6rem;color:var(--text3);margin-bottom:2px">'+p[0]+'</div>'
+            +'<div style="font-size:.78rem;font-weight:700;font-family:\'DM Mono\',monospace">'+p[1]+'</div>'
+            +'</div>';
+        }).join('')
+        +'</div>'
+      : '';
+
+    var html = '<div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:4px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+      +'<div style="font-weight:700;font-size:.82rem">⛽ Tình trạng nhiên liệu</div>'
+      +'<div style="font-size:.7rem;color:var(--text3)">Sau chuyến '+dateLabel+hdLabel+'</div>'
+      +'</div>'
+      + endLabel
+      + consumeRow
+      + barHTML
+      +(pct==null && dungTichBinh
+        ? '<div style="font-size:.7rem;color:var(--text3);margin-top:8px">💡 Tick "Đổ đầy bình" ở báo cáo KM đầu/cuối để hiển thị mức dầu còn lại</div>'
+        : '')
+      +(pct==null && !dungTichBinh
+        ? '<div style="font-size:.7rem;color:var(--text3);margin-top:8px">💡 Nhập dung tích bình dầu của xe để hiển thị % còn lại</div>'
+        : '')
+      +'</div>';
+
+    el.innerHTML = html;
+  }).catch(function(e){
+    console.warn('loadFuelStatus:', e.message);
+    el.innerHTML = '';
+  });
 }
 
 // Tính tổng km từ cặp km_dau / km_cuoi trong bao_cao và cập nhật UI
