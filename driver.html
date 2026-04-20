@@ -1217,76 +1217,99 @@ function loadTripProgress(hdSo){
     .catch(function(e){ console.warn('[NK] loadTripProgress:',e.message); });
 }
 
+// Thứ tự bắt buộc: km_dau → hop_dong → km_cuoi → hoan_thanh
+var TRIP_STEPS = [
+  { type:'km_dau',    ico:'🔢', lbl:'Km đầu',   needPrev:null         },
+  { type:'hop_dong',  ico:'📋', lbl:'HĐ vận chuyển', needPrev:'km_dau'   },
+  { type:'km_cuoi',   ico:'🏁', lbl:'Km cuối',  needPrev:'hop_dong'   },
+  { type:'hoan_thanh',ico:'✅', lbl:'Hoàn thành',needPrev:'km_cuoi'   },
+];
+
 function renderTripProgress(){
   var el = document.getElementById('trip-progress');
   if(!el) return;
-  var steps=[
-    {type:'km_dau',    ico:'🔢', lbl:'Km đầu',    req:true },
-    {type:'km_cuoi',   ico:'🏁', lbl:'Km cuối',   req:false},
-    {type:'hoan_thanh',ico:'✅', lbl:'Hoàn thành', req:false},
-  ];
-  var done=TRIP_REPORTS_DONE;
-  var html='<div class="card" style="padding:14px 16px">'
+  var done = TRIP_REPORTS_DONE;
+  var html = '<div class="card" style="padding:14px 16px">'
     +'<div style="font-size:.64rem;font-weight:700;color:#a09c96;letter-spacing:.6px;margin-bottom:10px">📍 TIẾN TRÌNH CHUYẾN ĐI</div>'
     +'<div style="display:flex;align-items:center">';
-  steps.forEach(function(s,i){
-    var isDone=!!done[s.type];
-    var isLocked=(s.type==='hoan_thanh')&&!done['km_cuoi'];
-    // xác định class
-    var cls= isDone   ? 'step-done'
-           : isLocked ? 'step-locked'
-           : (i===0||(i>0&&done[steps[i-1].type])) ? 'step-next'
-           : 'step-pending';
-    var ico= isDone ? '✓' : isLocked ? '🔒' : s.ico;
-    html+='<div class="progress-step '+cls+'">'
+
+  TRIP_STEPS.forEach(function(s, i){
+    var isDone   = !!done[s.type];
+    var prevDone = !s.needPrev || !!done[s.needPrev];
+    var isLocked = !isDone && !prevDone;
+    var isNext   = !isDone && prevDone;
+
+    var cls = isDone   ? 'step-done'
+            : isLocked ? 'step-locked'
+            : isNext   ? 'step-next'
+            : 'step-pending';
+    var ico = isDone ? '✓' : isLocked ? '🔒' : s.ico;
+    var needLbl = isLocked
+      ? '<br><span style="color:#ef4444;font-size:.54rem">Cần '+TRIP_STEPS[i-1].lbl+'</span>'
+      : '';
+
+    html += '<div class="progress-step '+cls+'">'
       +'<div class="step-icon">'+ico+'</div>'
-      +'<div class="step-lbl">'+s.lbl+(isLocked?'<br><span style="color:#ef4444;font-size:.56rem">Cần Km cuối</span>':'')+'</div>'
+      +'<div class="step-lbl">'+s.lbl+needLbl+'</div>'
       +'</div>';
-    if(i<steps.length-1){
-      html+='<div class="step-arrow '+(isDone?'done':'pending')+'"></div>';
+    if(i < TRIP_STEPS.length - 1){
+      html += '<div class="step-arrow '+(isDone?'done':'pending')+'"></div>';
     }
   });
-  html+='</div></div>';
-  el.innerHTML=html;
-  el.style.display='block';
+
+  html += '</div></div>';
+  el.innerHTML = html;
+  el.style.display = 'block';
 }
 
 function enforceReportOrder(){
-  // Khóa nút "Hoàn thành" nếu chưa có km_cuoi (bắt buộc km_cuoi trước khi hoàn thành)
-  var hasKmCuoi = !!TRIP_REPORTS_DONE['km_cuoi'];
-  var locked = HAS_ACTIVE_HD && !hasKmCuoi;
+  if(!HAS_ACTIVE_HD) return;
+  var done = TRIP_REPORTS_DONE;
 
-  // Khóa nút .rpt-btn dạng grid
-  document.querySelectorAll('.rpt-btn[data-type="hoan_thanh"]').forEach(function(btn){
-    if(locked){
-      btn.disabled = true;
-      btn.style.opacity = '0.38';
-      btn.style.cursor  = 'not-allowed';
-      btn.style.filter  = 'grayscale(60%)';
-      btn.title = 'Cần gửi báo cáo Km cuối trước';
-    }
+  // Với mỗi bước, khóa nút .rpt-btn nếu bước trước chưa xong
+  TRIP_STEPS.forEach(function(s){
+    var prevDone = !s.needPrev || !!done[s.needPrev];
+    var locked   = !prevDone && !done[s.type]; // chưa làm + chưa đủ điều kiện
+
+    document.querySelectorAll('.rpt-btn[data-type="'+s.type+'"]').forEach(function(btn){
+      if(locked){
+        btn.disabled = true;
+        btn.style.opacity = '0.38';
+        btn.style.cursor  = 'not-allowed';
+        btn.style.filter  = 'grayscale(60%)';
+        btn.title = s.needPrev ? 'Cần hoàn thành bước trước' : '';
+      } else if(!done[s.type]){
+        // Đủ điều kiện, mở khóa
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor  = 'pointer';
+        btn.style.filter  = '';
+        btn.title = '';
+      }
+    });
   });
 
-  // Khóa nút trong card active contract
+  // Nút "✅ Báo hoàn thành" trong card active contract
   var cardBtn = document.getElementById('btn-hoan-thanh-card');
   if(cardBtn){
-    if(locked){
+    var canFinish = !!done['km_cuoi']; // km_cuoi xong mới cho hoàn thành
+    if(!canFinish){
       cardBtn.disabled = true;
-      cardBtn.style.opacity  = '0.38';
-      cardBtn.style.cursor   = 'not-allowed';
-      cardBtn.style.filter   = 'grayscale(60%)';
+      cardBtn.style.opacity    = '0.38';
+      cardBtn.style.cursor     = 'not-allowed';
+      cardBtn.style.filter     = 'grayscale(60%)';
       cardBtn.style.background = '#f3f4f6';
-      cardBtn.style.borderColor = '#d1d5db';
-      cardBtn.style.color    = '#9ca3af';
+      cardBtn.style.borderColor= '#d1d5db';
+      cardBtn.style.color      = '#9ca3af';
       cardBtn.title = 'Cần gửi báo cáo Km cuối trước';
     } else {
       cardBtn.disabled = false;
-      cardBtn.style.opacity  = '1';
-      cardBtn.style.cursor   = 'pointer';
-      cardBtn.style.filter   = '';
+      cardBtn.style.opacity    = '1';
+      cardBtn.style.cursor     = 'pointer';
+      cardBtn.style.filter     = '';
       cardBtn.style.background = '#f0fdf4';
-      cardBtn.style.borderColor = '#86efac';
-      cardBtn.style.color    = '#16a34a';
+      cardBtn.style.borderColor= '#86efac';
+      cardBtn.style.color      = '#16a34a';
       cardBtn.title = '';
     }
   }
