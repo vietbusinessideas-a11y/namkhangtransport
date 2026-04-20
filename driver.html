@@ -482,7 +482,7 @@
         </label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <input id="tank-so-lit" type="text" inputmode="decimal" class="inp"
-            placeholder="vd: 60.0" oninput="updateSubmitBtn()"
+            placeholder="vd: 60,0" oninput="fmtLitInput(this);updateSubmitBtn()"
             style="text-align:center;font-size:1rem;font-weight:700">
           <input id="tank-tong-tien" type="text" inputmode="numeric" class="inp"
             placeholder="Tổng tiền (đ)" oninput="fmtCurrencyInput(this)"
@@ -512,7 +512,7 @@
         <div>
           <label style="font-size:.72rem;font-weight:600;color:#6b6760;display:block;margin-bottom:5px">Số lít <span style="color:#dc2626">*</span></label>
           <input id="modal-so-lit" type="text" inputmode="decimal" class="inp"
-            placeholder="vd: 45.5" oninput="updateSubmitBtn()"
+            placeholder="vd: 45,5" oninput="fmtLitInput(this);updateSubmitBtn()"
             style="text-align:center;font-size:1rem;font-weight:700">
         </div>
         <div>
@@ -1152,6 +1152,35 @@ function fmtCurrencyInput(el){
   var raw = el.value.replace(/[^0-9]/g, '');
   if(raw === ''){ el.value = ''; return; }
   el.value = new Intl.NumberFormat('vi-VN').format(parseInt(raw, 10));
+}
+
+// ─── Format số lít khi nhập: dấu . ngăn nghìn, dấu , thập phân (vd: 1.234,5) ─
+function fmtLitInput(el){
+  var v = el.value;
+  // Tìm vị trí dấu thập phân cuối cùng (. hoặc ,)
+  var dotIdx   = v.lastIndexOf('.');
+  var commaIdx = v.lastIndexOf(',');
+  var sepIdx   = Math.max(dotIdx, commaIdx);
+
+  var intStr, decStr;
+  if(sepIdx >= 0){
+    intStr = v.substring(0, sepIdx).replace(/[^0-9]/g, '');
+    decStr = v.substring(sepIdx + 1).replace(/[^0-9]/g, '');
+  } else {
+    intStr = v.replace(/[^0-9]/g, '');
+    decStr = null;
+  }
+
+  if(!intStr && decStr === null){ el.value = ''; return; }
+  var formatted = intStr ? new Intl.NumberFormat('vi-VN').format(parseInt(intStr, 10)) : '0';
+  el.value = decStr !== null ? formatted + ',' + decStr : formatted;
+}
+
+// ─── Parse số lít từ chuỗi đã format (vd: "1.234,5" → 1234.5) ──────────
+function readLit(val){
+  if(!val || !val.trim()) return null;
+  var n = parseFloat(val.replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? null : n;
 }
 
 // ─── Toggle checkbox "đổ đầy bình" ───────────────────────────────────────
@@ -1927,14 +1956,14 @@ function updateSubmitBtn(){
   var soLitOk = true;
   if(CURRENT_REPORT === 'do_dau'){
     var litVal = (document.getElementById('modal-so-lit')||{}).value || '';
-    soLitOk = litVal.trim() !== '' && !isNaN(parseFloat(litVal.replace(',','.')));
+    soLitOk = readLit(litVal) !== null;
   }
 
   // km_dau / km_cuoi + tick "đổ đầy" → bắt buộc nhập số lít
   var tankLitOk = true;
   if((CURRENT_REPORT === 'km_dau' || CURRENT_REPORT === 'km_cuoi') && TANK_FILL_CHECKED){
     var tankLit = (document.getElementById('tank-so-lit')||{}).value || '';
-    tankLitOk = tankLit.trim() !== '' && !isNaN(parseFloat(tankLit.replace(',','.')));
+    tankLitOk = readLit(tankLit) !== null;
   }
 
   // thay_nhot: cần km + ảnh
@@ -2034,7 +2063,7 @@ async function saveBaoCao(anhUrls){
   if(CURRENT_REPORT === 'do_dau'){
     var litRaw  = (document.getElementById('modal-so-lit')||{}).value || '';
     var tienRaw = (document.getElementById('modal-tong-tien')||{}).value || '';
-    soLitNum    = litRaw  ? parseFloat(litRaw.replace(',','.'))  : null;
+    soLitNum    = readLit(litRaw);
     tongTienNum = tienRaw ? parseInt(tienRaw.replace(/\D/g,'')) : null;
   }
 
@@ -2111,7 +2140,7 @@ async function submitReport(){
       if(CURRENT_REPORT === 'km_dau' && TANK_FILL_CHECKED){
         var tankLitRawD  = (document.getElementById('tank-so-lit')||{}).value || '';
         var tankTienRawD = (document.getElementById('tank-tong-tien')||{}).value || '';
-        var tankLitD  = tankLitRawD  ? parseFloat(tankLitRawD.replace(',','.'))  : null;
+        var tankLitD  = readLit(tankLitRawD);
         var tankTienD = tankTienRawD ? parseInt(tankTienRawD.replace(/\D/g,'')) : null;
         if(tankLitD && SB_URL && SB_KEY){
           var dD = SESSION.driver;
@@ -2144,7 +2173,7 @@ async function submitReport(){
       if(CURRENT_REPORT === 'km_cuoi' && TANK_FILL_CHECKED){
         var tankLitRaw  = (document.getElementById('tank-so-lit')||{}).value || '';
         var tankTienRaw = (document.getElementById('tank-tong-tien')||{}).value || '';
-        var tankLit  = tankLitRaw  ? parseFloat(tankLitRaw.replace(',','.'))  : null;
+        var tankLit  = readLit(tankLitRaw);
         var tankTien = tankTienRaw ? parseInt(tankTienRaw.replace(/\D/g,'')) : null;
         if(tankLit){
           var d2 = SESSION.driver;
