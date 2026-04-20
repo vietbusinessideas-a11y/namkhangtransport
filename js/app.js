@@ -280,6 +280,71 @@ function autoTransitionHD(){
   });
 }
 
+// ─── Kiểm tra HĐ quá hạn chưa báo cáo hoàn thành → cảnh báo admin ─────────
+async function checkOverdueHDAdmin(){
+  if(!SB_URL || !SB_KEY) return;
+  var todayStr = new Date().toISOString().slice(0,10);
+
+  // Lọc HĐ đang chạy mà ngày về đã qua
+  var candidates = DB.hopDong.filter(function(h){
+    return h.tt === 'dang_chay' && h.ngay_ve && h.ngay_ve < todayStr;
+  });
+  if(!candidates.length) return;
+
+  // Với mỗi HĐ, kiểm tra xem đã có báo cáo hoan_thanh chưa
+  var overdue = [];
+  for(var i = 0; i < candidates.length; i++){
+    var h = candidates[i];
+    try{
+      var rows = await sbFetch('bao_cao',
+        'hd_so=eq.'+encodeURIComponent(h.so)+'&loai=eq.hoan_thanh&select=id&limit=1');
+      if(!rows || !rows.length) overdue.push(h); // chưa có báo cáo hoàn thành
+    } catch(e){
+      overdue.push(h); // không check được → cũng đưa vào danh sách
+    }
+  }
+  if(!overdue.length) return;
+
+  // Build danh sách HTML
+  var rows = overdue.map(function(h){
+    var daysPast = Math.round((new Date(todayStr) - new Date(h.ngay_ve)) / 864e5);
+    var pastLabel = daysPast === 1 ? '1 ngày' : daysPast + ' ngày';
+    return '<tr onclick="closeModal();setTimeout(function(){openHDDetail(\''+h.id+'\')},120)" '
+      +'style="cursor:pointer" title="Xem chi tiết">'
+      +'<td><span class="mono" style="color:var(--blue);font-weight:700">'+h.so+'</span></td>'
+      +'<td style="font-weight:500">'+h.kh+'</td>'
+      +'<td style="color:var(--text2);font-size:.78rem">'+h.tuyen+'</td>'
+      +'<td style="font-size:.78rem">'+fmtD(h.ngay_di||h.ngay||'')+'</td>'
+      +'<td style="font-size:.78rem">'+fmtD(h.ngay_ve)+'</td>'
+      +'<td style="color:var(--red);font-weight:700">+'+pastLabel+'</td>'
+      +'<td style="font-size:.78rem;color:var(--text3)">'+( h.taixe||'—')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var body = '<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:12px;'
+    +'padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-start">'
+    +'<span style="font-size:1.6rem;line-height:1">⚠️</span>'
+    +'<div>'
+    +'<div style="font-weight:700;color:#991b1b;margin-bottom:4px">'
+    +overdue.length+' hợp đồng quá ngày về — tài xế chưa báo cáo hoàn thành</div>'
+    +'<div style="font-size:.78rem;color:#b91c1c">Bấm vào từng hợp đồng để xem chi tiết và liên hệ tài xế.</div>'
+    +'</div></div>'
+    +'<div class="table-wrap"><table class="dt" style="min-width:580px">'
+    +'<thead><tr>'
+    +'<th>Số HĐ</th><th>Khách hàng</th><th>Tuyến đường</th>'
+    +'<th>Ngày đi</th><th>Ngày về</th><th>Quá hạn</th><th>Tài xế</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div>';
+
+  showModal(
+    '🚨 Cảnh báo hợp đồng quá hạn',
+    'Phát hiện lúc đăng nhập · ' + new Date().toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'}),
+    body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Đã biết, đóng lại</button>'
+  );
+}
+
 function loadDB(){
   DB={hopDong:DEFAULT_HD.slice(),thuChi:DEFAULT_TC.slice(),xe:DEFAULT_XE.slice(),taiXe:DEFAULT_TX.slice(),khachHang:DEFAULT_KH.slice()};
   updateBadges();
@@ -303,6 +368,7 @@ function loadDB(){
     autoTransitionHD().then(function(){
       updateBadges();
       renderCurrentPage();
+      checkOverdueHDAdmin(); // Kiểm tra HĐ quá hạn chưa báo cáo hoàn thành
     });
   }).catch(function(err){
     console.error('SB ERR:',err.message);
