@@ -1921,6 +1921,12 @@ function updateSubmitBtn(){
     hint.textContent = 'Cần nhập số lít và ít nhất 1 ảnh để gửi';
   } else if(CURRENT_REPORT === 'km_cuoi' && TANK_FILL_CHECKED && !tankLitOk){
     hint.textContent = 'Cần nhập số lít đổ đầy bình';
+  } else if(CURRENT_REPORT === 'thay_nhot' && !kmOk && !PHOTOS.length){
+    hint.textContent = 'Cần nhập số km và ít nhất 1 ảnh để gửi';
+  } else if(CURRENT_REPORT === 'thay_nhot' && !kmOk){
+    hint.textContent = 'Cần nhập số km tại thời điểm thay nhớt';
+  } else if(CURRENT_REPORT === 'thay_nhot' && !PHOTOS.length){
+    hint.textContent = 'Cần ít nhất 1 ảnh (hoá đơn / chứng từ thay nhớt)';
   } else {
     hint.textContent = 'Cần ít nhất 1 ảnh để gửi báo cáo';
   }
@@ -2131,15 +2137,18 @@ async function submitReport(){
       setTimeout(function(){ loadTripProgress(runningHD.so); }, 800);
     }
 
-    // ── Nếu vừa gửi báo cáo thay nhớt → patch xe.km_thay_nhot + reload card ──
+    // ── Nếu vừa gửi báo cáo thay nhớt → patch xe + log bảo dưỡng + reload card ──
     if(reportedType === 'thay_nhot'){
       var newKmNhot = readDriverKm('modal-km-val');
       if(newKmNhot && SB_URL && SB_KEY && XE_INFO_CACHE){
         var bienXeNhot = XE_INFO_CACHE.bien_so;
-        // Patch xe table
+        var d3 = SESSION && SESSION.driver;
+        var todayStr3 = new Date().toISOString().slice(0,10);
+
+        // 1) Patch xe.km_thay_nhot
         sbGet('xe','select=id&bien_so=eq.'+encodeURIComponent(bienXeNhot)+'&limit=1')
           .then(function(rows){
-            if(!rows||!rows.length) return;
+            if(!rows||!rows.length) return Promise.resolve();
             var xeId=rows[0].id;
             return fetch(SB_URL+'/rest/v1/xe?id=eq.'+xeId,{
               method:'PATCH',
@@ -2149,12 +2158,31 @@ async function submitReport(){
             });
           })
           .then(function(){
-            // Cập nhật cache và re-render card ngay lập tức
+            // 2) Ghi vào bao_duong_lich_su để hiện trong admin maintenance history
+            var bdPayload = {
+              bien_so:   bienXeNhot,
+              loai:      'thay_nhot',
+              ngay:      todayStr3,
+              km:        newKmNhot,
+              ghi_chu:   (d3 ? 'Tài xế '+d3.ten+' báo cáo qua app' : 'Báo cáo qua app tài xế'),
+            };
+            return fetch(SB_URL+'/rest/v1/bao_duong_lich_su',{
+              method:'POST',
+              headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,
+                       'Content-Type':'application/json','Prefer':'return=minimal'},
+              body:JSON.stringify(bdPayload)
+            });
+          })
+          .then(function(){
+            // 3) Cập nhật cache + re-render card + reload fuel bar
             if(XE_INFO_CACHE){ XE_INFO_CACHE.km_thay_nhot = newKmNhot; }
             renderXeInfoCard(XE_INFO_CACHE);
+            var dungTich = XE_INFO_CACHE && XE_INFO_CACHE.dung_tich_binh
+              ? Number(XE_INFO_CACHE.dung_tich_binh) : null;
+            loadDriverFuelBar(bienXeNhot, dungTich);
             showToast('🛢️ Đã cập nhật mốc thay nhớt: '+newKmNhot.toLocaleString('vi-VN')+' km');
           })
-          .catch(function(e){ console.warn('[NK] patch km_thay_nhot:', e.message); });
+          .catch(function(e){ console.warn('[NK] thay_nhot post-submit:', e.message); });
       }
     }
 
