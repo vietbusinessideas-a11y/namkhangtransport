@@ -462,6 +462,54 @@
       <input id="modal-km-val" type="text" inputmode="numeric" class="inp" placeholder="Nhập số km hiện tại (vd: 45.230)" oninput="fmtDriverKm(this)">
     </div>
 
+    <!-- Tình trạng bình dầu (chỉ hiện khi km_dau hoặc km_cuoi) -->
+    <div id="tank-section" style="display:none;padding:0 20px 12px">
+      <div id="tank-checkbox-row" style="display:flex;align-items:center;gap:10px;
+           background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:12px 14px;cursor:pointer"
+           onclick="toggleTankFill()">
+        <div id="tank-checkbox" style="width:22px;height:22px;border-radius:6px;border:2px solid #d97706;
+             background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s">
+        </div>
+        <div>
+          <div id="tank-checkbox-lbl" style="font-size:.8rem;font-weight:700;color:#92400e"></div>
+          <div id="tank-checkbox-sub" style="font-size:.7rem;color:#b45309;margin-top:1px"></div>
+        </div>
+      </div>
+      <!-- Ô nhập số lít (chỉ hiện khi check) — chỉ dùng cho km_cuoi -->
+      <div id="tank-lit-row" style="display:none;margin-top:10px;display:none">
+        <label style="font-size:.72rem;font-weight:600;color:#6b6760;display:block;margin-bottom:5px">
+          Số lít đổ lần này <span style="color:#dc2626">*</span>
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <input id="tank-so-lit" type="text" inputmode="decimal" class="inp"
+            placeholder="vd: 60.0" oninput="updateSubmitBtn()"
+            style="text-align:center;font-size:1rem;font-weight:700">
+          <input id="tank-tong-tien" type="text" inputmode="numeric" class="inp"
+            placeholder="Tổng tiền (đ)" oninput="fmtCurrencyInput(this)"
+            style="text-align:center;font-size:1rem;font-weight:700">
+        </div>
+      </div>
+    </div>
+
+    <!-- Nhập liệu đổ dầu (chỉ hiện khi do_dau) -->
+    <div id="fuel-section" style="display:none;padding:0 20px 12px">
+      <div style="font-size:.74rem;font-weight:700;color:#1a1814;margin-bottom:8px">⛽ Thông tin đổ dầu</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:.72rem;font-weight:600;color:#6b6760;display:block;margin-bottom:5px">Số lít <span style="color:#dc2626">*</span></label>
+          <input id="modal-so-lit" type="text" inputmode="decimal" class="inp"
+            placeholder="vd: 45.5" oninput="updateSubmitBtn()"
+            style="text-align:center;font-size:1rem;font-weight:700">
+        </div>
+        <div>
+          <label style="font-size:.72rem;font-weight:600;color:#6b6760;display:block;margin-bottom:5px">Tổng tiền (đ)</label>
+          <input id="modal-tong-tien" type="text" inputmode="numeric" class="inp"
+            placeholder="vd: 900.000" oninput="fmtCurrencyInput(this)"
+            style="text-align:center;font-size:1rem;font-weight:700">
+        </div>
+      </div>
+    </div>
+
     <!-- Ghi chú -->
     <div style="padding:0 20px 12px">
       <label style="font-size:.74rem;font-weight:600;color:#6b6760;display:block;margin-bottom:6px">Ghi chú (tùy chọn)</label>
@@ -1085,6 +1133,30 @@ function populateApp(){
   loadMonthStats(d.ten, yyyy+'-'+mm);
 }
 
+// ─── Format số tiền khi nhập (dấu phân cách nghìn, không cho chữ) ────────
+function fmtCurrencyInput(el){
+  var raw = el.value.replace(/[^0-9]/g, '');
+  if(raw === ''){ el.value = ''; return; }
+  el.value = new Intl.NumberFormat('vi-VN').format(parseInt(raw, 10));
+}
+
+// ─── Toggle checkbox "đổ đầy bình" ───────────────────────────────────────
+function toggleTankFill(){
+  TANK_FILL_CHECKED = !TANK_FILL_CHECKED;
+  var cb     = document.getElementById('tank-checkbox');
+  var litRow = document.getElementById('tank-lit-row');
+  if(cb){
+    cb.innerHTML       = TANK_FILL_CHECKED ? '<span style="color:#16a34a;font-size:14px;font-weight:900">✓</span>' : '';
+    cb.style.background   = TANK_FILL_CHECKED ? '#f0fdf4' : '#fff';
+    cb.style.borderColor  = TANK_FILL_CHECKED ? '#16a34a' : '#d97706';
+  }
+  // Ô nhập số lít chỉ hiện cho km_cuoi (không cho km_dau)
+  if(litRow){
+    litRow.style.display = (TANK_FILL_CHECKED && CURRENT_REPORT === 'km_cuoi') ? 'block' : 'none';
+  }
+  updateSubmitBtn();
+}
+
 // ─── Format số km khi nhập (dấu phân cách nghìn) ─────────────────────────
 function fmtDriverKm(el){
   var raw = el.value.replace(/[^0-9]/g, '');
@@ -1204,6 +1276,7 @@ function calcDuration(ngay_di, ngay_ve){
 var REQUIRES_HD = ['do_dau','km_dau','km_cuoi','hoan_thanh','hop_dong','hanh_khach'];
 var TRIP_REPORTS_DONE = {};   // cache: loai → true, cho chuyến đang chạy
 var XE_INFO_CACHE = null;     // cache thông tin xe
+var TANK_FILL_CHECKED = false; // trạng thái checkbox "đổ đầy bình"
 
 // ═══════════════════════════════════════
 // TRIP PROGRESS STEPPER
@@ -1561,6 +1634,41 @@ function openModal(type){
   document.getElementById('photo-grid').innerHTML = '';
   document.getElementById('photo-empty').style.display = 'block';
 
+  // Hiện / ẩn ô nhập nhiên liệu (chỉ cho do_dau)
+  var fuelSec = document.getElementById('fuel-section');
+  if(fuelSec){
+    fuelSec.style.display = (type === 'do_dau') ? 'block' : 'none';
+    document.getElementById('modal-so-lit').value = '';
+    document.getElementById('modal-tong-tien').value = '';
+  }
+
+  // Hiện / ẩn section tình trạng bình dầu (km_dau & km_cuoi)
+  var tankSec = document.getElementById('tank-section');
+  if(tankSec){
+    var showTank = (type === 'km_dau' || type === 'km_cuoi');
+    tankSec.style.display = showTank ? 'block' : 'none';
+    // Reset trạng thái
+    TANK_FILL_CHECKED = false;
+    var cb = document.getElementById('tank-checkbox');
+    if(cb){ cb.innerHTML=''; cb.style.background='#fff'; cb.style.borderColor='#d97706'; }
+    var litRow = document.getElementById('tank-lit-row');
+    if(litRow) litRow.style.display = 'none';
+    var soLitEl = document.getElementById('tank-so-lit');
+    if(soLitEl) soLitEl.value = '';
+    var tienEl = document.getElementById('tank-tong-tien');
+    if(tienEl) tienEl.value = '';
+    // Nội dung label tuỳ loại
+    var lbl = document.getElementById('tank-checkbox-lbl');
+    var sub = document.getElementById('tank-checkbox-sub');
+    if(type === 'km_dau'){
+      if(lbl) lbl.textContent = 'Đã đổ đầy bình trước khi xuất phát';
+      if(sub) sub.textContent = 'Tick nếu bình dầu đã được đổ đầy — giúp tính tiêu hao chính xác';
+    } else {
+      if(lbl) lbl.textContent = 'Đổ đầy bình khi về bến';
+      if(sub) sub.textContent = 'Tick và nhập số lít đổ lần này để hệ thống tính đúng nhiên liệu';
+    }
+  }
+
   // Báo cáo hoàn thành: chỉ cần xác nhận, không cần ảnh
   var isConfirmOnly = (type === 'hoan_thanh');
   document.getElementById('confirm-section').style.display = isConfirmOnly ? 'block' : 'none';
@@ -1710,13 +1818,37 @@ function deletePhoto(idx){
 function updateSubmitBtn(){
   var btn  = document.getElementById('submit-btn');
   var hint = document.getElementById('photo-hint');
+
+  // Kiểm tra riêng do_dau: cần ảnh + số lít
+  var soLitOk = true;
+  if(CURRENT_REPORT === 'do_dau'){
+    var litVal = (document.getElementById('modal-so-lit')||{}).value || '';
+    soLitOk = litVal.trim() !== '' && !isNaN(parseFloat(litVal.replace(',','.')));
+  }
+
+  // km_cuoi + tick "đổ đầy" → bắt buộc nhập số lít đổ lần cuối
+  var tankLitOk = true;
+  if(CURRENT_REPORT === 'km_cuoi' && TANK_FILL_CHECKED){
+    var tankLit = (document.getElementById('tank-so-lit')||{}).value || '';
+    tankLitOk = tankLit.trim() !== '' && !isNaN(parseFloat(tankLit.replace(',','.')));
+  }
+
   // hoan_thanh không cần ảnh — bật nút ngay
-  var ready = PHOTOS.length > 0 || CURRENT_REPORT === 'hoan_thanh';
+  var ready = (PHOTOS.length > 0 || CURRENT_REPORT === 'hoan_thanh') && soLitOk && tankLitOk;
   btn.disabled = !ready;
   btn.style.background  = ready ? (CURRENT_REPORT==='hoan_thanh' ? '#16a34a' : '#2563eb') : '#d1d5db';
   btn.style.color       = ready ? '#fff'     : '#9ca3af';
   btn.style.cursor      = ready ? 'pointer'  : 'not-allowed';
-  hint.style.display    = ready ? 'none'     : 'block';
+
+  // Hint message
+  if(CURRENT_REPORT === 'do_dau' && !soLitOk){
+    hint.textContent = 'Cần nhập số lít và ít nhất 1 ảnh để gửi';
+  } else if(CURRENT_REPORT === 'km_cuoi' && TANK_FILL_CHECKED && !tankLitOk){
+    hint.textContent = 'Cần nhập số lít đổ đầy bình';
+  } else {
+    hint.textContent = 'Cần ít nhất 1 ảnh để gửi báo cáo';
+  }
+  hint.style.display = ready ? 'none' : 'block';
   if(CURRENT_REPORT === 'hoan_thanh'){
     document.getElementById('submit-icon').textContent = '✅';
     document.getElementById('submit-text').textContent = 'Xác nhận hoàn thành';
@@ -1779,18 +1911,38 @@ async function saveBaoCao(anhUrls){
   var activeHD = ACTIVE_HDS.length ? ACTIVE_HDS[0]
     : MOCK_HD.find(function(h){ return h.taixe===d.ten && h.tt==='dang_chay'; });
   var soKmNum = readDriverKm('modal-km-val');   // strip dấu phân cách, trả về số nguyên hoặc null
+
+  // Đọc số lít và tổng tiền (chỉ có khi do_dau)
+  var soLitNum = null, tongTienNum = null;
+  if(CURRENT_REPORT === 'do_dau'){
+    var litRaw  = (document.getElementById('modal-so-lit')||{}).value || '';
+    var tienRaw = (document.getElementById('modal-tong-tien')||{}).value || '';
+    soLitNum    = litRaw  ? parseFloat(litRaw.replace(',','.'))  : null;
+    tongTienNum = tienRaw ? parseInt(tienRaw.replace(/\D/g,'')) : null;
+  }
+
+  // Đọc flag "đổ đầy bình" (km_dau & km_cuoi)
+  var daDoDayBinh = (TANK_FILL_CHECKED &&
+    (CURRENT_REPORT === 'km_dau' || CURRENT_REPORT === 'km_cuoi')) ? true : null;
+
+  var bienXe = d.bienXe && d.bienXe !== '—' ? d.bienXe : (activeHD ? activeHD.xe : null);
+  var hdSo   = activeHD ? activeHD.so : null;
+
   var payload = {
-    loai:       CURRENT_REPORT,
-    hd_so:      activeHD ? activeHD.so : null,   // ← lưu số HĐ để admin xem được
-    tai_xe_id:  d.id && !d.id.startsWith('mock_') ? d.id : null,
-    tai_xe_ten: d.ten,
-    tai_xe_sdt: d.sdt,
-    bien_xe:    d.bienXe && d.bienXe !== '—' ? d.bienXe : (activeHD ? activeHD.xe : null),
-    ghi_chu:    note || null,
-    so_km:      soKmNum,                          // ← số km đồng hồ xe (km_dau / km_cuoi)
-    anh_urls:   anhUrls,
-    gps_lat:    GPS ? GPS.lat : null,
-    gps_lng:    GPS ? GPS.lng : null,
+    loai:           CURRENT_REPORT,
+    hd_so:          hdSo,
+    tai_xe_id:      d.id && !d.id.startsWith('mock_') ? d.id : null,
+    tai_xe_ten:     d.ten,
+    tai_xe_sdt:     d.sdt,
+    bien_xe:        bienXe,
+    ghi_chu:        note || null,
+    so_km:          soKmNum,
+    so_lit:         soLitNum,
+    tong_tien:      tongTienNum,
+    da_do_day_binh: daDoDayBinh,
+    anh_urls:       anhUrls,
+    gps_lat:        GPS ? GPS.lat : null,
+    gps_lng:        GPS ? GPS.lng : null,
   };
   var r = await fetch(SB_URL+'/rest/v1/bao_cao', {
     method:  'POST',
@@ -1832,6 +1984,39 @@ async function submitReport(){
       // ── Lưu metadata vào bảng bao_cao ──
       txt.textContent = 'Đang lưu báo cáo...';
       await saveBaoCao(anhUrls);
+
+      // ── Nếu km_cuoi + đổ đầy bình → tự tạo record do_dau cho lần đổ cuối ──
+      if(CURRENT_REPORT === 'km_cuoi' && TANK_FILL_CHECKED){
+        var tankLitRaw  = (document.getElementById('tank-so-lit')||{}).value || '';
+        var tankTienRaw = (document.getElementById('tank-tong-tien')||{}).value || '';
+        var tankLit  = tankLitRaw  ? parseFloat(tankLitRaw.replace(',','.'))  : null;
+        var tankTien = tankTienRaw ? parseInt(tankTienRaw.replace(/\D/g,'')) : null;
+        if(tankLit){
+          var d2 = SESSION.driver;
+          var activeHD2 = ACTIVE_HDS.length ? ACTIVE_HDS[0] : null;
+          var fillPayload = {
+            loai:       'do_dau',
+            hd_so:      activeHD2 ? activeHD2.so : null,
+            tai_xe_id:  d2.id && !d2.id.startsWith('mock_') ? d2.id : null,
+            tai_xe_ten: d2.ten,
+            tai_xe_sdt: d2.sdt,
+            bien_xe:    d2.bienXe && d2.bienXe !== '—' ? d2.bienXe : (activeHD2 ? activeHD2.xe : null),
+            ghi_chu:    'Đổ đầy bình khi về bến (tự động từ báo cáo km cuối)',
+            so_lit:     tankLit,
+            tong_tien:  tankTien,
+            da_do_day_binh: true,
+            anh_urls:   [],
+            gps_lat:    GPS ? GPS.lat : null,
+            gps_lng:    GPS ? GPS.lng : null,
+          };
+          await fetch(SB_URL+'/rest/v1/bao_cao', {
+            method:'POST',
+            headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,
+                     'Content-Type':'application/json','Prefer':'return=minimal'},
+            body: JSON.stringify(fillPayload),
+          });
+        }
+      }
     } else {
       // Offline: chỉ báo thành công (không lưu được)
       await new Promise(function(res){ setTimeout(res, 800); });

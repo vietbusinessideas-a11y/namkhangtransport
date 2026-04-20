@@ -865,6 +865,7 @@ function openHDDetail(id) {
     [['Khách hàng',h.kh],['Tuyến đường',h.tuyen]].concat(ngayRows).concat([['Xe',h.xe||'—'],['Tài xế',txLink],['Trạng thái',TTMAP[h.tt]||h.tt]]).map(function(p){return'<div class="detail-item"><label>'+p[0]+'</label><div class="dv">'+p[1]+'</div></div>';}).join('') + '</div>' +
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px">' +
     [['Giá trị',fmtM(h.giatri),'var(--text)'],['Đã thu','+'+fmtM(h.dathu),'var(--green)'],['Còn lại',cn>0?fmtM(cn):'Đã đủ',cn>0?'var(--orange)':'var(--green)']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.65rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace;color:'+p[2]+'">'+p[1]+'</div></div>';}).join('') + '</div>' +
+    '<div id="fuel-summary" style="margin-top:16px;display:none"></div>'+
     baoCaoSectionHTML(h.so),
     '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'
     +'<button class="btn btn-ghost" style="color:var(--blue);border-color:var(--blue)" onclick="duplicateHD(\''+h.id+'\')">📋 Nhân đôi</button>'
@@ -883,6 +884,7 @@ function openHDDetail(id) {
       results.forEach(function(rows){ rows.forEach(function(r){ if(!seen[r.id]){ seen[r.id]=true; combined.push(r); } }); });
       combined.sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
       renderBaoCaoSection(combined, h.taixe);
+      renderFuelSummary(combined); // ← hiển thị tóm tắt nhiên liệu
     });
   })();
 }
@@ -2988,6 +2990,93 @@ var BC_LOAI_LABEL={
   hop_dong:'📋 Hợp đồng', hanh_khach:'👥 Hành khách',
 };
 
+// ─── Tóm tắt nhiên liệu cho chi tiết HĐ ────────────────────────────────────
+function renderFuelSummary(rows){
+  var el = document.getElementById('fuel-summary');
+  if(!el) return;
+
+  // Lấy km_dau và km_cuoi từ báo cáo
+  var kmDauRec  = rows.find(function(r){ return r.loai==='km_dau'  && r.so_km; });
+  var kmCuoiRec = rows.find(function(r){ return r.loai==='km_cuoi' && r.so_km; });
+  var kmDau  = kmDauRec  ? Number(kmDauRec.so_km)  : null;
+  var kmCuoi = kmCuoiRec ? Number(kmCuoiRec.so_km) : null;
+
+  // Kiểm tra phương pháp đổ đầy bình (để đánh giá độ chính xác)
+  var daDayDau  = !!(kmDauRec  && kmDauRec.da_do_day_binh);
+  var daDayCuoi = !!(kmCuoiRec && kmCuoiRec.da_do_day_binh);
+  // Cũng kiểm tra nếu lần đổ dầu cuối cùng có flag da_do_day_binh (auto-tạo từ km_cuoi)
+  var doDauRows = rows.filter(function(r){ return r.loai==='do_dau'; });
+  if(!daDayCuoi){
+    var lastFillRec = doDauRows.find(function(r){ return r.da_do_day_binh; });
+    if(lastFillRec) daDayCuoi = true;
+  }
+  var isAccurate = daDayDau && daDayCuoi; // cả 2 đầu đều đổ đầy → chính xác
+
+  // Tổng hợp từ các báo cáo đổ dầu
+  var tongLit = 0, tongTien = 0, coLit = false, coTien = false;
+  doDauRows.forEach(function(r){
+    if(r.so_lit    != null){ tongLit  += Number(r.so_lit);   coLit  = true; }
+    if(r.tong_tien != null){ tongTien += Number(r.tong_tien); coTien = true; }
+  });
+
+  // Ẩn section nếu chưa có dữ liệu nào liên quan
+  if(!doDauRows.length && !kmDau && !kmCuoi){ el.style.display='none'; return; }
+
+  var tongKm   = (kmDau != null && kmCuoi != null) ? (kmCuoi - kmDau) : null;
+  var kmPerLit = (tongKm && coLit && tongLit > 0)  ? (tongKm / tongLit) : null;
+
+  function fmtN(n,dec){ return n!=null ? n.toLocaleString('vi-VN',{maximumFractionDigits:dec||0}) : '—'; }
+
+  // Màu mức tiêu hao: xanh ≥6, cam 4–6, đỏ <4
+  var fuelColor = kmPerLit
+    ? (kmPerLit >= 6 ? 'var(--green)' : kmPerLit >= 4 ? 'var(--orange)' : 'var(--red)')
+    : 'var(--text)';
+
+  // Badge độ chính xác
+  var accuracyBadge = isAccurate
+    ? '<span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700;margin-left:6px">✅ Chính xác</span>'
+    : '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700;margin-left:6px">⚠️ Ước tính</span>';
+
+  var cells = [
+    { lbl:'Km đầu',        val: kmDau  ? fmtN(kmDau)+' km'  : '—', ico:'🔢' },
+    { lbl:'Km cuối',       val: kmCuoi ? fmtN(kmCuoi)+' km' : '—', ico:'🏁' },
+    { lbl:'Tổng KM chạy',  val: tongKm ? fmtN(tongKm)+' km' : '—', ico:'📏', bold:true },
+    { lbl:'Số lần đổ dầu', val: doDauRows.length + ' lần',           ico:'⛽' },
+    { lbl:'Tổng lít tiêu thụ', val: coLit ? fmtN(tongLit,1)+' lít' : '—', ico:'🛢️' },
+    { lbl:'Mức tiêu hao',  val: kmPerLit ? fmtN(kmPerLit,1)+' km/L' : '—',
+      ico:'📊', bold:true, color: fuelColor },
+    { lbl:'Chi phí nhiên liệu', val: coTien ? fmtM(tongTien) : '—',
+      ico:'💰', span:3, bold:true },
+  ];
+
+  var html = '<div style="border-top:1px solid var(--border);padding-top:14px">'
+    +'<div style="display:flex;align-items:center;margin-bottom:10px">'
+    +'<span style="font-weight:700;font-size:.82rem">⛽ Nhiên liệu chuyến đi</span>'
+    + accuracyBadge
+    +'</div>';
+
+  if(!isAccurate){
+    html += '<div style="font-size:.7rem;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;'
+      +'border-radius:8px;padding:8px 12px;margin-bottom:10px">'
+      +'💡 Để có kết quả chính xác, tài xế cần tick <strong>"Đổ đầy bình"</strong> ở cả báo cáo KM đầu và KM cuối.</div>';
+  }
+
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
+  cells.forEach(function(c){
+    var spanStyle = c.span ? 'grid-column:span '+c.span+';' : '';
+    var clr = c.color || 'var(--text)';
+    var fw  = c.bold  ? '700' : '600';
+    html += '<div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;'+spanStyle+'">'
+      +'<div style="font-size:.62rem;color:var(--text3);margin-bottom:3px">'+c.ico+' '+c.lbl+'</div>'
+      +'<div style="font-size:.85rem;font-weight:'+fw+';color:'+clr+';font-family:\'DM Mono\',monospace">'+c.val+'</div>'
+      +'</div>';
+  });
+  html += '</div></div>';
+
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
 // Fetch danh sách báo cáo từ Supabase theo filter (hd_so | bien_xe | tai_xe_sdt)
 // extraFilter: chuỗi query bổ sung, vd 'hd_so=is.null' để chỉ lấy BC chưa gán HĐ
 async function fetchBaoCao(field, value, extraFilter){
@@ -2996,7 +3085,7 @@ async function fetchBaoCao(field, value, extraFilter){
     var url=SB_URL+'/rest/v1/bao_cao?'+field+'=eq.'+encodeURIComponent(value)
       +(extraFilter?'&'+extraFilter:'')
       +'&order=created_at.desc&limit=50'
-      +'&select=id,loai,tai_xe_ten,tai_xe_sdt,bien_xe,hd_so,ghi_chu,anh_urls,gps_lat,gps_lng,created_at';
+      +'&select=id,loai,tai_xe_ten,tai_xe_sdt,bien_xe,hd_so,ghi_chu,anh_urls,gps_lat,gps_lng,so_km,so_lit,tong_tien,da_do_day_binh,created_at';
     var r=await fetch(url,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
     if(!r.ok) throw new Error(r.status);
     return r.json();
