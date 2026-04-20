@@ -266,6 +266,10 @@
       <!-- Hợp đồng đang chạy -->
       <div style="margin-bottom:16px">
         <div style="font-size:.72rem;font-weight:700;color:#a09c96;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">🚦 Hôm nay</div>
+
+        <!-- Banner cảnh báo chuyến quá hạn chưa báo cáo -->
+        <div id="overdue-banner" style="display:none;margin-bottom:12px"></div>
+
         <div id="active-contracts">
           <div class="card" style="padding:20px;text-align:center;color:#a09c96">
             <div style="font-size:2rem;margin-bottom:6px">📋</div>
@@ -464,8 +468,17 @@
       <textarea id="modal-note" class="inp" rows="2" placeholder="Mô tả thêm nếu cần..." style="resize:none"></textarea>
     </div>
 
-    <!-- Hướng dẫn chụp -->
-    <div style="padding:0 20px 12px">
+    <!-- Xác nhận hoàn thành (chỉ hiện khi hoan_thanh) -->
+    <div id="confirm-section" style="display:none;padding:0 20px 16px">
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:14px;padding:20px;text-align:center">
+        <div style="font-size:2.4rem;margin-bottom:10px">✅</div>
+        <div style="font-size:.92rem;font-weight:700;color:#15803d;margin-bottom:6px">Bạn xác nhận đã hoàn thành chuyến đi?</div>
+        <div style="font-size:.75rem;color:#166534">Hợp đồng sẽ tự động chuyển sang trạng thái <strong>Hoàn thành</strong>.</div>
+      </div>
+    </div>
+
+    <!-- Hướng dẫn chụp (ẩn khi hoan_thanh) -->
+    <div id="photo-section" style="padding:0 20px 12px">
       <div style="font-size:.78rem;font-weight:600;color:#1a1814;margin-bottom:10px">📷 Ảnh báo cáo <span style="color:#dc2626">*</span></div>
       <div style="font-size:.7rem;color:#a09c96;margin-bottom:10px">Chụp hoặc chọn ảnh để nộp báo cáo. Ảnh sẽ tự động được đánh dấu thời gian và vị trí GPS.</div>
 
@@ -883,7 +896,7 @@ function populateApp(){
       })();
       var alreadyRunning = rows.some(function(r){ return r.trang_thai === 'dang_chay'; });
       var toActivate = alreadyRunning ? [] : rows.filter(function(r){
-        var startDate = r.ngay_di || r.ngay_th; // ưu tiên ngày khởi hành thực tế
+        var startDate = r.ngay_di || r.ngay_th;
         return r.trang_thai === 'cho_xe' && startDate && startDate <= todayStr;
       });
       if(toActivate.length){
@@ -898,11 +911,32 @@ function populateApp(){
         return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong, ngay:r.ngay_th, ngay_di:r.ngay_di||'', ngay_ve:r.ngay_ve||'', tt:r.trang_thai, taixe:d.ten };
       });
       ACTIVE_HDS = sbHDs;
-      renderActiveContracts(sbHDs);
 
-      var hasDangChay = sbHDs.some(function(h){ return h.tt === 'dang_chay'; });
-      var hasChoXe    = sbHDs.some(function(h){ return h.tt === 'cho_xe'; });
-      setReportButtons(hasDangChay, hasChoXe);
+      // ── Kiểm tra chuyến quá hạn chưa báo cáo hoàn thành ──────────────────
+      var hasOverdue = await checkOverdueContracts(sbHDs);
+
+      // Nếu có chuyến quá hạn → chặn auto-activate HĐ mới (hiện cảnh báo thay vì active)
+      if(hasOverdue){
+        // Render nhưng không cho phép nút báo cáo bình thường
+        renderActiveContracts(sbHDs);
+        // Chỉ cho phép mở modal hoan_thanh (để tài xế giải quyết chuyến cũ)
+        setReportButtons(true, false);
+        // Khóa tất cả nút trừ hoan_thanh
+        document.querySelectorAll('.rpt-btn').forEach(function(btn){
+          var type = btn.getAttribute('data-type');
+          if(type !== 'hoan_thanh'){
+            btn.disabled = true;
+            btn.style.opacity = '0.25';
+            btn.style.cursor  = 'not-allowed';
+            btn.style.filter  = 'grayscale(80%)';
+          }
+        });
+      } else {
+        renderActiveContracts(sbHDs);
+        var hasDangChay = sbHDs.some(function(h){ return h.tt === 'dang_chay'; });
+        var hasChoXe    = sbHDs.some(function(h){ return h.tt === 'cho_xe'; });
+        setReportButtons(hasDangChay, hasChoXe);
+      }
 
       // ── Load tiến trình báo cáo cho chuyến đang chạy ──
       var activeSo = sbHDs.find(function(h){ return h.tt==='dang_chay'; });
@@ -1232,6 +1266,76 @@ function enforceReportOrder(){
 }
 
 // ═══════════════════════════════════════
+// OVERDUE CONTRACT CHECK
+// ═══════════════════════════════════════
+var OVERDUE_HD = null; // HĐ quá hạn chưa báo cáo hoàn thành
+
+async function checkOverdueContracts(sbHDs){
+  var banner = document.getElementById('overdue-banner');
+  if(!banner) return false;
+
+  var todayStr = new Date().toISOString().slice(0,10);
+
+  // Tìm HĐ dang_chay đã qua ngày về mà chưa có báo cáo hoàn thành
+  var running = sbHDs.filter(function(h){ return h.tt === 'dang_chay'; });
+  var overdue = running.filter(function(h){
+    return h.ngay_ve && h.ngay_ve < todayStr;
+  });
+
+  if(!overdue.length){ OVERDUE_HD=null; banner.style.display='none'; return false; }
+
+  // Kiểm tra từng HĐ quá hạn: có báo cáo hoan_thanh chưa?
+  var needReport = [];
+  for(var i=0;i<overdue.length;i++){
+    var h = overdue[i];
+    if(SB_URL && SB_KEY){
+      try{
+        var rows = await sbGet('bao_cao',
+          'hd_so=eq.'+encodeURIComponent(h.so)+'&loai=eq.hoan_thanh&limit=1');
+        if(!rows || !rows.length) needReport.push(h);
+      }catch(e){ needReport.push(h); }
+    } else {
+      needReport.push(h);
+    }
+  }
+
+  if(!needReport.length){ OVERDUE_HD=null; banner.style.display='none'; return false; }
+
+  OVERDUE_HD = needReport[0];
+  renderOverdueBanner(OVERDUE_HD);
+  return true;
+}
+
+function renderOverdueBanner(h){
+  var banner = document.getElementById('overdue-banner');
+  if(!banner) return;
+  var ngayVe = h.ngay_ve ? driverFmtDate(h.ngay_ve) : '—';
+  banner.style.display = 'block';
+  banner.innerHTML =
+    '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:14px;padding:16px 18px">'
+    +'<div style="display:flex;align-items:flex-start;gap:10px">'
+      +'<span style="font-size:1.4rem;flex-shrink:0">⚠️</span>'
+      +'<div style="flex:1">'
+        +'<div style="font-size:.82rem;font-weight:700;color:#dc2626;margin-bottom:4px">Chuyến quá hạn chưa hoàn thành!</div>'
+        +'<div style="font-size:.74rem;color:#991b1b;margin-bottom:2px">'
+          +'HĐ <strong>'+h.so+'</strong> · '+h.kh
+        +'</div>'
+        +'<div style="font-size:.7rem;color:#b91c1c;margin-bottom:12px">'
+          +'Ngày về: <strong>'+ngayVe+'</strong> · Chưa gửi báo cáo hoàn thành'
+        +'</div>'
+        +'<div style="font-size:.72rem;color:#7f1d1d;margin-bottom:12px">'
+          +'Bạn cần gửi báo cáo hoàn thành chuyến này trước khi nhận chuyến mới.'
+        +'</div>'
+        +'<button onclick="openModal(\'hoan_thanh\')" '
+          +'style="width:100%;padding:11px;border-radius:10px;background:#dc2626;border:none;color:#fff;font-size:.8rem;font-weight:700;cursor:pointer">'
+          +'✅ Gửi báo cáo hoàn thành ngay'
+        +'</button>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
+}
+
+// ═══════════════════════════════════════
 // XE INFO — ĐĂNG KIỂM / BẢO HIỂM / NHỚT
 // ═══════════════════════════════════════
 function driverFmtDate(str){
@@ -1403,6 +1507,12 @@ function openModal(type){
   document.getElementById('modal-note').value = '';
   document.getElementById('photo-grid').innerHTML = '';
   document.getElementById('photo-empty').style.display = 'block';
+
+  // Báo cáo hoàn thành: chỉ cần xác nhận, không cần ảnh
+  var isConfirmOnly = (type === 'hoan_thanh');
+  document.getElementById('confirm-section').style.display = isConfirmOnly ? 'block' : 'none';
+  document.getElementById('photo-section').style.display  = isConfirmOnly ? 'none'  : 'block';
+
   updateSubmitBtn();
 
   // Refresh GPS status
@@ -1547,13 +1657,20 @@ function deletePhoto(idx){
 function updateSubmitBtn(){
   var btn  = document.getElementById('submit-btn');
   var hint = document.getElementById('photo-hint');
-  var has  = PHOTOS.length > 0;
-  btn.disabled = !has;
-  btn.style.background  = has ? '#2563eb' : '#d1d5db';
-  btn.style.color       = has ? '#fff'     : '#9ca3af';
-  btn.style.cursor      = has ? 'pointer'  : 'not-allowed';
-  hint.style.display    = has ? 'none'     : 'block';
-  if(has) document.getElementById('submit-icon').textContent = '📤';
+  // hoan_thanh không cần ảnh — bật nút ngay
+  var ready = PHOTOS.length > 0 || CURRENT_REPORT === 'hoan_thanh';
+  btn.disabled = !ready;
+  btn.style.background  = ready ? (CURRENT_REPORT==='hoan_thanh' ? '#16a34a' : '#2563eb') : '#d1d5db';
+  btn.style.color       = ready ? '#fff'     : '#9ca3af';
+  btn.style.cursor      = ready ? 'pointer'  : 'not-allowed';
+  hint.style.display    = ready ? 'none'     : 'block';
+  if(CURRENT_REPORT === 'hoan_thanh'){
+    document.getElementById('submit-icon').textContent = '✅';
+    document.getElementById('submit-text').textContent = 'Xác nhận hoàn thành';
+  } else if(PHOTOS.length > 0){
+    document.getElementById('submit-icon').textContent = '📤';
+    document.getElementById('submit-text').textContent = 'Gửi báo cáo';
+  }
 }
 
 // ═══════════════════════════════════════
@@ -1639,14 +1756,15 @@ async function saveBaoCao(anhUrls){
 }
 
 async function submitReport(){
-  if(!PHOTOS.length) return;
+  // hoan_thanh không cần ảnh; các loại khác phải có ít nhất 1 ảnh
+  if(!PHOTOS.length && CURRENT_REPORT !== 'hoan_thanh') return;
   var btn  = document.getElementById('submit-btn');
   var spin = document.getElementById('submit-spinner');
   var txt  = document.getElementById('submit-text');
 
   btn.disabled = true;
   spin.style.display = 'inline-block';
-  txt.textContent = 'Đang tải ảnh...';
+  txt.textContent = CURRENT_REPORT === 'hoan_thanh' ? 'Đang xử lý...' : 'Đang tải ảnh...';
 
   try {
     var anhUrls = [];
@@ -1693,12 +1811,39 @@ async function submitReport(){
     // ── Refresh tiến trình chuyến đi ─────────────────────────────────────────
     var runningHD = ACTIVE_HDS.find(function(h){ return h.tt==='dang_chay'; });
     if(runningHD){
-      // Cập nhật cache local ngay để UI không cần đợi fetch lại
       TRIP_REPORTS_DONE[reportedType] = true;
       renderTripProgress();
       enforceReportOrder();
-      // Đồng thời load lại từ server cho chính xác
       setTimeout(function(){ loadTripProgress(runningHD.so); }, 800);
+    }
+
+    // ── Nếu vừa gửi báo cáo hoàn thành → ẩn banner quá hạn + mở khóa nút ──
+    if(reportedType === 'hoan_thanh'){
+      OVERDUE_HD = null;
+      var ob = document.getElementById('overdue-banner');
+      if(ob) ob.style.display = 'none';
+      // Reload lại toàn bộ HĐ để phản ánh trạng thái mới
+      setTimeout(function(){
+        var d2 = SESSION && SESSION.driver;
+        if(d2 && SB_URL && SB_KEY){
+          sbGet('hop_dong',
+            'select=so_hd,khach_hang,tuyen_duong,ngay_th,ngay_di,ngay_ve,trang_thai'
+            +'&tai_xe=eq.'+encodeURIComponent(d2.ten)
+            +'&trang_thai=in.(dang_chay,cho_xe)&limit=10'
+          ).then(function(rows){
+            var freshHDs = (rows||[]).map(function(r){
+              return { so:r.so_hd, kh:r.khach_hang, tuyen:r.tuyen_duong,
+                       ngay:r.ngay_th, ngay_di:r.ngay_di||'', ngay_ve:r.ngay_ve||'',
+                       tt:r.trang_thai, taixe:d2.ten };
+            });
+            ACTIVE_HDS = freshHDs;
+            renderActiveContracts(freshHDs);
+            var hasDC = freshHDs.some(function(h){ return h.tt==='dang_chay'; });
+            var hasCX = freshHDs.some(function(h){ return h.tt==='cho_xe'; });
+            setReportButtons(hasDC, hasCX);
+          }).catch(function(){});
+        }
+      }, 1200);
     }
 
   } catch(e){
