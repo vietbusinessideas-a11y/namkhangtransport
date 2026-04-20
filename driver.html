@@ -873,6 +873,7 @@ function populateApp(){
   // Gọi ngay với mock data, rồi async Supabase override
   setReportButtons(todayHDs.length > 0, false);
   renderActiveContracts(todayHDs);
+  enforceReportOrder(); // Khoá ngay card button trước khi Supabase trả về
   // Load thông tin xe từ SESSION (sẽ override khi Supabase trả về)
   if(d.bienXe && d.bienXe!=='—') loadXeInfo(d.bienXe);
 
@@ -931,11 +932,13 @@ function populateApp(){
             btn.style.filter  = 'grayscale(80%)';
           }
         });
+        enforceReportOrder(); // Khoá card button theo thứ tự bước
       } else {
         renderActiveContracts(sbHDs);
         var hasDangChay = sbHDs.some(function(h){ return h.tt === 'dang_chay'; });
         var hasChoXe    = sbHDs.some(function(h){ return h.tt === 'cho_xe'; });
         setReportButtons(hasDangChay, hasChoXe);
+        enforceReportOrder(); // Khoá card button ngay, trước khi loadTripProgress async xong
       }
 
       // ── Load tiến trình báo cáo cho chuyến đang chạy ──
@@ -1891,6 +1894,7 @@ async function submitReport(){
             var hasDC = freshHDs.some(function(h){ return h.tt==='dang_chay'; });
             var hasCX = freshHDs.some(function(h){ return h.tt==='cho_xe'; });
             setReportButtons(hasDC, hasCX);
+            enforceReportOrder(); // Đồng bộ card button sau khi reload
           }).catch(function(){});
         }
       }, 1200);
