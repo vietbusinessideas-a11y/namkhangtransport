@@ -2678,11 +2678,175 @@ function driverConfirmComplete(hdId){
 }
 
 // ═══════════════════════════════════════
+// QUẢN LÝ TÀI KHOẢN TÀI XẾ
+// ═══════════════════════════════════════
+function loadDriverAccounts(){
+  var el = document.getElementById('driver-accounts-list');
+  if(!el) return;
+  if(!SB_URL || !SB_KEY){
+    el.innerHTML = '<div style="padding:16px;font-size:.8rem;color:var(--text3)">⚠️ Chưa kết nối Supabase — không thể quản lý tài khoản.</div>';
+    return;
+  }
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);font-size:.82rem">⏳ Đang tải...</div>';
+
+  sbFetch('tai_xe','select=id,ho_ten,so_dt,cmnd,mat_khau&order=ho_ten.asc').then(function(rows){
+    if(!rows || !rows.length){
+      el.innerHTML = '<div style="padding:16px;font-size:.8rem;color:var(--text3)">Chưa có tài xế nào trong hệ thống.</div>';
+      return;
+    }
+
+    var html = '<div style="font-size:.72rem;color:var(--text3);margin-bottom:12px;padding-top:4px">'
+      +'Tài xế đăng nhập bằng <strong>Số điện thoại</strong> làm tên tài khoản. '
+      +'Mật khẩu mặc định là <strong>4 số cuối CCCD</strong> nếu chưa được thiết lập.'
+      +'</div>';
+
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    rows.forEach(function(tx){
+      var hasPw   = !!(tx.mat_khau && tx.mat_khau.toString().trim());
+      var fallback = (tx.cmnd||'').toString().slice(-4);
+      var badge = hasPw
+        ? '<span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:20px;padding:2px 10px;font-size:.67rem;font-weight:700">✅ Đã có MK</span>'
+        : (fallback
+            ? '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:2px 10px;font-size:.67rem;font-weight:700">⚠️ Dùng MK mặc định</span>'
+            : '<span style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:20px;padding:2px 10px;font-size:.67rem;font-weight:700">🚫 Chưa có MK</span>');
+
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;'
+        +'background:var(--surface2);border-radius:10px;border:1px solid var(--border)">'
+        // Avatar
+        +'<div style="width:36px;height:36px;border-radius:50%;background:var(--blue);color:#fff;'
+        +'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.82rem;flex-shrink:0">'
+        +(tx.ho_ten||'?').substring(0,2).toUpperCase()+'</div>'
+        // Info
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-weight:600;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(tx.ho_ten||'—')+'</div>'
+        +'<div style="font-size:.72rem;color:var(--text3);margin-top:1px">📱 '+(tx.so_dt||'Chưa có SĐT')+'</div>'
+        +'</div>'
+        // Badge
+        +'<div style="flex-shrink:0">'+badge+'</div>'
+        // Button
+        +'<button class="btn btn-ghost btn-sm" style="flex-shrink:0;white-space:nowrap" '
+        +'onclick="openSetPassModal(\''+tx.id+'\',\''+encodeURIComponent(tx.ho_ten||'')+'\',\''+encodeURIComponent(tx.so_dt||'')+'\')">'
+        +'🔑 Cấp MK</button>'
+        +'</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  }).catch(function(e){
+    el.innerHTML = '<div style="padding:16px;font-size:.8rem;color:var(--red)">❌ Lỗi: '+e.message+'</div>';
+  });
+}
+
+function openSetPassModal(id, tenEncoded, sdtEncoded){
+  var ten = decodeURIComponent(tenEncoded);
+  var sdt = decodeURIComponent(sdtEncoded);
+
+  // Gợi ý mật khẩu tự động: 3 chữ cái đầu tên + 3 số cuối SĐT
+  var autoSuggest = (function(){
+    var parts = ten.trim().split(/\s+/);
+    var last  = parts[parts.length - 1] || '';
+    var prefix = last.substring(0,3).toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/đ/g,'d').replace(/[^a-z]/g,'');
+    var suffix = (sdt||'').replace(/\D/g,'').slice(-3);
+    return prefix && suffix ? prefix + suffix : '';
+  })();
+
+  var body = '<div style="display:flex;flex-direction:column;gap:14px">'
+    // Tên tài xế + tài khoản
+    +'<div style="background:var(--surface2);border-radius:10px;padding:12px 14px">'
+    +'<div style="font-size:.72rem;color:var(--text3);margin-bottom:4px">Tài xế</div>'
+    +'<div style="font-weight:700">'+ten+'</div>'
+    +'<div style="font-size:.78rem;color:var(--text2);margin-top:2px">📱 Tên đăng nhập: <strong>'+sdt+'</strong></div>'
+    +'</div>'
+    // Gợi ý tự động
+    +(autoSuggest
+      ? '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between">'
+        +'<div><div style="font-size:.72rem;color:#166534;font-weight:600">💡 Gợi ý mật khẩu</div>'
+        +'<div style="font-size:.92rem;font-weight:700;font-family:\'DM Mono\',monospace;color:#15803d;letter-spacing:2px;margin-top:2px">'+autoSuggest+'</div></div>'
+        +'<button class="btn btn-sm" style="background:#dcfce7;color:#166534;border:1px solid #86efac" '
+        +'onclick="document.getElementById(\'new-pass-input\').value=\''+autoSuggest+'\';'
+        +'document.getElementById(\'confirm-pass-input\').value=\''+autoSuggest+'\';checkPassMatch()">Dùng gợi ý</button>'
+        +'</div>'
+      : '')
+    // Nhập mật khẩu mới
+    +'<div>'
+    +'<label style="font-size:.75rem;font-weight:600;color:var(--text2);display:block;margin-bottom:6px">Mật khẩu mới <span style="color:var(--red)">*</span></label>'
+    +'<div style="position:relative">'
+    +'<input id="new-pass-input" type="password" class="fc" placeholder="Tối thiểu 4 ký tự" oninput="checkPassMatch()" style="padding-right:44px">'
+    +'<button onclick="togglePassVis(\'new-pass-input\',\'tog1\')" id="tog1" '
+    +'style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;color:var(--text3)">👁️</button>'
+    +'</div></div>'
+    // Xác nhận mật khẩu
+    +'<div>'
+    +'<label style="font-size:.75rem;font-weight:600;color:var(--text2);display:block;margin-bottom:6px">Xác nhận mật khẩu <span style="color:var(--red)">*</span></label>'
+    +'<div style="position:relative">'
+    +'<input id="confirm-pass-input" type="password" class="fc" placeholder="Nhập lại mật khẩu" oninput="checkPassMatch()" style="padding-right:44px">'
+    +'<button onclick="togglePassVis(\'confirm-pass-input\',\'tog2\')" id="tog2" '
+    +'style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;color:var(--text3)">👁️</button>'
+    +'</div></div>'
+    // Thông báo match
+    +'<div id="pass-match-hint" style="font-size:.75rem;min-height:18px"></div>'
+    +'</div>';
+
+  showModal('🔑 Cấp mật khẩu', ten,
+    body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button>'
+    +'<button id="save-pass-btn" class="btn btn-accent" disabled onclick="saveDriverPass(\''+id+'\',\''+tenEncoded+'\')">💾 Lưu mật khẩu</button>'
+  );
+  setTimeout(function(){ var el=document.getElementById('new-pass-input'); if(el) el.focus(); }, 100);
+}
+
+function togglePassVis(inputId, btnId){
+  var inp = document.getElementById(inputId);
+  var btn = document.getElementById(btnId);
+  if(!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  if(btn) btn.textContent = inp.type === 'password' ? '👁️' : '🙈';
+}
+
+function checkPassMatch(){
+  var p1  = (document.getElementById('new-pass-input')||{}).value || '';
+  var p2  = (document.getElementById('confirm-pass-input')||{}).value || '';
+  var hint = document.getElementById('pass-match-hint');
+  var btn  = document.getElementById('save-pass-btn');
+  if(!p1){ if(hint) hint.textContent=''; if(btn) btn.disabled=true; return; }
+  if(p1.length < 4){
+    if(hint){ hint.textContent='⚠️ Mật khẩu phải có ít nhất 4 ký tự'; hint.style.color='var(--orange)'; }
+    if(btn) btn.disabled = true; return;
+  }
+  if(!p2){ if(hint) hint.textContent=''; if(btn) btn.disabled=true; return; }
+  if(p1 === p2){
+    if(hint){ hint.textContent='✅ Mật khẩu khớp'; hint.style.color='var(--green)'; }
+    if(btn) btn.disabled = false;
+  } else {
+    if(hint){ hint.textContent='❌ Mật khẩu không khớp'; hint.style.color='var(--red)'; }
+    if(btn) btn.disabled = true;
+  }
+}
+
+function saveDriverPass(id, tenEncoded){
+  var ten = decodeURIComponent(tenEncoded);
+  var pw  = (document.getElementById('new-pass-input')||{}).value || '';
+  if(!pw || pw.length < 4){ toast('⚠️ Mật khẩu quá ngắn','error'); return; }
+  var btn = document.getElementById('save-pass-btn');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Đang lưu...'; }
+  sbPatch('tai_xe', id, {mat_khau: pw}).then(function(){
+    closeModal();
+    toast('✅ Đã cấp mật khẩu cho '+ten,'success');
+    loadDriverAccounts(); // Cập nhật lại danh sách
+  }).catch(function(e){
+    toast('❌ Lỗi: '+e.message,'error');
+    if(btn){ btn.disabled=false; btn.textContent='💾 Lưu mật khẩu'; }
+  });
+}
+
+// ═══════════════════════════════════════
 // CÀI ĐẶT
 // ═══════════════════════════════════════
 var DEFAULT_CD={ten:'Công ty TNHH Nam Khang Transport',mst:'0123456789',sdt:'0908 123 456',email:'contact@namkhang.vn',diachi:'123 Nguyễn Văn Linh, Q.7, TP.HCM'};
 function fillCaiDat(cd){document.getElementById('cd-ten').value=cd.ten||'';document.getElementById('cd-mst').value=cd.mst||'';document.getElementById('cd-sdt').value=cd.sdt||'';document.getElementById('cd-email').value=cd.email||'';document.getElementById('cd-diachi').value=cd.dia_chi||cd.diachi||'';}
 function loadCaiDat(){
+  loadDriverAccounts(); // Tải danh sách tài khoản tài xế
   fillCaiDat(DEFAULT_CD);
   if(!SB_URL){try{var raw=localStorage.getItem('nk_caidat_v1');if(raw)fillCaiDat(JSON.parse(raw));}catch(e){}return;}
   sbFetch('cai_dat','id=eq.company&limit=1').then(function(rows){if(rows&&rows.length)fillCaiDat(rows[0]);}).catch(function(e){
