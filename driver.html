@@ -318,8 +318,8 @@
         <button class="rpt-btn" data-type="hop_dong" onclick="openModal('hop_dong')">
           <span class="icon">📋</span><span class="lbl">BC hợp đồng vận chuyển</span>
         </button>
-        <button class="rpt-btn" data-type="hanh_khach" onclick="openModal('hanh_khach')">
-          <span class="icon">👥</span><span class="lbl">DS hành khách</span>
+        <button class="rpt-btn" data-type="thay_nhot" onclick="openModal('thay_nhot')">
+          <span class="icon">🛢️</span><span class="lbl">Báo cáo thay nhớt</span>
         </button>
       </div>
 
@@ -365,7 +365,7 @@
         <button class="rpt-btn" data-type="su_co" onclick="openModal('su_co')"><span class="icon">⚠️</span><span class="lbl">Sự cố</span></button>
         <button class="rpt-btn" data-type="bao_cao_khac" onclick="openModal('bao_cao_khac')"><span class="icon">📄</span><span class="lbl">Báo cáo khác</span></button>
         <button class="rpt-btn" data-type="hop_dong" onclick="openModal('hop_dong')"><span class="icon">📋</span><span class="lbl">Hợp đồng VC</span></button>
-        <button class="rpt-btn" data-type="hanh_khach" onclick="openModal('hanh_khach')"><span class="icon">👥</span><span class="lbl">Hành khách</span></button>
+        <button class="rpt-btn" data-type="thay_nhot" onclick="openModal('thay_nhot')"><span class="icon">🛢️</span><span class="lbl">Thay nhớt</span></button>
       </div>
     </div>
 
@@ -605,7 +605,7 @@ var MODAL_TITLES = {
   su_co:       '⚠️ Báo sự cố',
   bao_cao_khac:'📄 Báo cáo khác',
   hop_dong:    '📋 BC hợp đồng vận chuyển',
-  hanh_khach:  '👥 Danh sách hành khách',
+  thay_nhot:   '🛢️ Báo cáo thay nhớt',
 };
 
 // ═══════════════════════════════════════
@@ -1273,7 +1273,7 @@ function calcDuration(ngay_di, ngay_ve){
 // REPORT BUTTON STATE
 // ═══════════════════════════════════════
 // Các loại báo cáo CẦN hợp đồng đang chạy
-var REQUIRES_HD = ['do_dau','km_dau','km_cuoi','hoan_thanh','hop_dong','hanh_khach'];
+var REQUIRES_HD = ['do_dau','km_dau','km_cuoi','hoan_thanh','hop_dong']; // thay_nhot không cần HĐ đang chạy
 var TRIP_REPORTS_DONE = {};   // cache: loai → true, cho chuyến đang chạy
 var XE_INFO_CACHE = null;     // cache thông tin xe
 var TANK_FILL_CHECKED = false; // trạng thái checkbox "đổ đầy bình"
@@ -1685,9 +1685,12 @@ function openModal(type){
   var kmRow   = document.getElementById('modal-km-row');
   var kmLabel = document.getElementById('modal-km-label');
   var kmVal   = document.getElementById('modal-km-val');
-  if(type === 'km_dau' || type === 'km_cuoi'){
-    kmLabel.textContent = (type === 'km_dau' ? 'Km đầu chuyến ' : 'Km cuối chuyến ');
-    kmLabel.innerHTML   += '<span style="color:#dc2626">*</span>';
+  if(type === 'km_dau' || type === 'km_cuoi' || type === 'thay_nhot'){
+    var kmLblText = type === 'km_dau'   ? 'Km đầu chuyến '
+                  : type === 'km_cuoi'  ? 'Km cuối chuyến '
+                  :                       'Số km tại thời điểm thay nhớt ';
+    kmLabel.textContent = kmLblText;
+    kmLabel.innerHTML  += '<span style="color:#dc2626">*</span>';
     kmRow.style.display = 'block';
     kmVal.value = '';
   } else {
@@ -1899,8 +1902,15 @@ function updateSubmitBtn(){
     tankLitOk = tankLit.trim() !== '' && !isNaN(parseFloat(tankLit.replace(',','.')));
   }
 
+  // thay_nhot: cần km + ảnh
+  var kmOk = true;
+  if(CURRENT_REPORT === 'thay_nhot'){
+    var kmV = (document.getElementById('modal-km-val')||{}).value || '';
+    kmOk = kmV.trim() !== '' && readDriverKm('modal-km-val') !== null;
+  }
+
   // hoan_thanh không cần ảnh — bật nút ngay
-  var ready = (PHOTOS.length > 0 || CURRENT_REPORT === 'hoan_thanh') && soLitOk && tankLitOk;
+  var ready = (PHOTOS.length > 0 || CURRENT_REPORT === 'hoan_thanh') && soLitOk && tankLitOk && kmOk;
   btn.disabled = !ready;
   btn.style.background  = ready ? (CURRENT_REPORT==='hoan_thanh' ? '#16a34a' : '#2563eb') : '#d1d5db';
   btn.style.color       = ready ? '#fff'     : '#9ca3af';
@@ -2119,6 +2129,33 @@ async function submitReport(){
       renderTripProgress();
       enforceReportOrder();
       setTimeout(function(){ loadTripProgress(runningHD.so); }, 800);
+    }
+
+    // ── Nếu vừa gửi báo cáo thay nhớt → patch xe.km_thay_nhot + reload card ──
+    if(reportedType === 'thay_nhot'){
+      var newKmNhot = readDriverKm('modal-km-val');
+      if(newKmNhot && SB_URL && SB_KEY && XE_INFO_CACHE){
+        var bienXeNhot = XE_INFO_CACHE.bien_so;
+        // Patch xe table
+        sbGet('xe','select=id&bien_so=eq.'+encodeURIComponent(bienXeNhot)+'&limit=1')
+          .then(function(rows){
+            if(!rows||!rows.length) return;
+            var xeId=rows[0].id;
+            return fetch(SB_URL+'/rest/v1/xe?id=eq.'+xeId,{
+              method:'PATCH',
+              headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,
+                       'Content-Type':'application/json','Prefer':'return=minimal'},
+              body:JSON.stringify({km_thay_nhot:newKmNhot})
+            });
+          })
+          .then(function(){
+            // Cập nhật cache và re-render card ngay lập tức
+            if(XE_INFO_CACHE){ XE_INFO_CACHE.km_thay_nhot = newKmNhot; }
+            renderXeInfoCard(XE_INFO_CACHE);
+            showToast('🛢️ Đã cập nhật mốc thay nhớt: '+newKmNhot.toLocaleString('vi-VN')+' km');
+          })
+          .catch(function(e){ console.warn('[NK] patch km_thay_nhot:', e.message); });
+      }
     }
 
     // ── Nếu vừa gửi báo cáo hoàn thành → ẩn banner quá hạn + mở khóa nút ──
