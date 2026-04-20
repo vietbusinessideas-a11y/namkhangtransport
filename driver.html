@@ -984,7 +984,7 @@ function populateApp(){
             '</div>'+
             (dur ? '<div style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:rgba(37,99,235,.1);border-radius:20px;font-size:.7rem;font-weight:700;color:#2563eb">🗓 '+dur+'</div>' : '')+
             '<div style="display:flex;gap:8px;margin-top:12px">'+
-              '<button onclick="openModal(\'hoan_thanh\')" style="flex:1;padding:9px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;font-size:.75rem;font-weight:700;cursor:pointer">✅ Báo hoàn thành</button>'+
+              '<button id="btn-hoan-thanh-card" onclick="openModal(\'hoan_thanh\')" style="flex:1;padding:9px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;font-size:.75rem;font-weight:700;cursor:pointer">✅ Báo hoàn thành</button>'+
               '<button onclick="openModal(\'su_co\')" style="padding:9px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:.75rem;font-weight:700;cursor:pointer">⚠️ Sự cố</button>'+
             '</div>'+
           '</div>';
@@ -1231,7 +1231,7 @@ function renderTripProgress(){
     +'<div style="display:flex;align-items:center">';
   steps.forEach(function(s,i){
     var isDone=!!done[s.type];
-    var isLocked=(s.type==='hoan_thanh')&&!done['km_dau'];
+    var isLocked=(s.type==='hoan_thanh')&&!done['km_cuoi'];
     // xác định class
     var cls= isDone   ? 'step-done'
            : isLocked ? 'step-locked'
@@ -1240,7 +1240,7 @@ function renderTripProgress(){
     var ico= isDone ? '✓' : isLocked ? '🔒' : s.ico;
     html+='<div class="progress-step '+cls+'">'
       +'<div class="step-icon">'+ico+'</div>'
-      +'<div class="step-lbl">'+s.lbl+(isLocked?'<br><span style="color:#ef4444;font-size:.56rem">Cần Km đầu</span>':'')+'</div>'
+      +'<div class="step-lbl">'+s.lbl+(isLocked?'<br><span style="color:#ef4444;font-size:.56rem">Cần Km cuối</span>':'')+'</div>'
       +'</div>';
     if(i<steps.length-1){
       html+='<div class="step-arrow '+(isDone?'done':'pending')+'"></div>';
@@ -1252,17 +1252,44 @@ function renderTripProgress(){
 }
 
 function enforceReportOrder(){
-  // Khóa thêm nút "Hoàn thành" nếu chưa có km_dau, dù đang có HĐ active
-  var hasKmDau = !!TRIP_REPORTS_DONE['km_dau'];
+  // Khóa nút "Hoàn thành" nếu chưa có km_cuoi (bắt buộc km_cuoi trước khi hoàn thành)
+  var hasKmCuoi = !!TRIP_REPORTS_DONE['km_cuoi'];
+  var locked = HAS_ACTIVE_HD && !hasKmCuoi;
+
+  // Khóa nút .rpt-btn dạng grid
   document.querySelectorAll('.rpt-btn[data-type="hoan_thanh"]').forEach(function(btn){
-    if(HAS_ACTIVE_HD && !hasKmDau){
+    if(locked){
       btn.disabled = true;
       btn.style.opacity = '0.38';
       btn.style.cursor  = 'not-allowed';
       btn.style.filter  = 'grayscale(60%)';
-      btn.title = 'Cần gửi báo cáo Km đầu trước';
+      btn.title = 'Cần gửi báo cáo Km cuối trước';
     }
   });
+
+  // Khóa nút trong card active contract
+  var cardBtn = document.getElementById('btn-hoan-thanh-card');
+  if(cardBtn){
+    if(locked){
+      cardBtn.disabled = true;
+      cardBtn.style.opacity  = '0.38';
+      cardBtn.style.cursor   = 'not-allowed';
+      cardBtn.style.filter   = 'grayscale(60%)';
+      cardBtn.style.background = '#f3f4f6';
+      cardBtn.style.borderColor = '#d1d5db';
+      cardBtn.style.color    = '#9ca3af';
+      cardBtn.title = 'Cần gửi báo cáo Km cuối trước';
+    } else {
+      cardBtn.disabled = false;
+      cardBtn.style.opacity  = '1';
+      cardBtn.style.cursor   = 'pointer';
+      cardBtn.style.filter   = '';
+      cardBtn.style.background = '#f0fdf4';
+      cardBtn.style.borderColor = '#86efac';
+      cardBtn.style.color    = '#16a34a';
+      cardBtn.title = '';
+    }
+  }
 }
 
 // ═══════════════════════════════════════
