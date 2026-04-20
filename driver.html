@@ -108,6 +108,31 @@
   .inp:focus { border-color: #2563eb; box-shadow: 0 0 0 3px #eff4ff; }
   .inp::placeholder { color: #a09c96; }
 
+  /* ─── Trip Progress Stepper ─────────────── */
+  .progress-step { display:flex;flex-direction:column;align-items:center;gap:5px;flex-shrink:0; }
+  .step-icon { width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.88rem;font-weight:700;border:2.5px solid;transition:all .2s; }
+  .step-lbl { font-size:.6rem;font-weight:700;text-align:center;max-width:56px;line-height:1.3; }
+  .step-done  .step-icon { background:#f0fdf4;border-color:#16a34a;color:#16a34a; }
+  .step-done  .step-lbl  { color:#16a34a; }
+  .step-next  .step-icon { background:#eff6ff;border-color:#2563eb;color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+  .step-next  .step-lbl  { color:#2563eb; }
+  .step-pending .step-icon { background:#f9fafb;border-color:#d1d5db;color:#9ca3af; }
+  .step-pending .step-lbl  { color:#9ca3af; }
+  .step-locked  .step-icon { background:#fef2f2;border-color:#fca5a5;color:#fca5a5; }
+  .step-locked  .step-lbl  { color:#ef4444; }
+  .step-arrow { flex:1;min-width:12px;height:2.5px;margin-bottom:22px;border-radius:2px;transition:background .3s; }
+  .step-arrow.done    { background:#16a34a; }
+  .step-arrow.pending { background:#e5e7eb; }
+
+  /* ─── Xe Info Card ───────────────────────── */
+  .xe-info-item { background:#f9fafb;border-radius:10px;padding:10px 8px;text-align:center; }
+  .xe-info-lbl  { font-size:.58rem;color:#a09c96;font-weight:700;letter-spacing:.4px;margin-bottom:4px; }
+  .xe-info-date { font-size:.72rem;color:#1a1814;font-weight:500; }
+  .xe-info-cnt  { font-size:.72rem;font-weight:700;margin-top:3px; }
+  .xe-cnt-ok    { color:#16a34a; }
+  .xe-cnt-warn  { color:#d97706; }
+  .xe-cnt-bad   { color:#dc2626; }
+
   /* ─── Scrollable content ─────────────────── */
   .scroll-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
@@ -239,7 +264,7 @@
     <div id="tab-home" class="tab-content active px-4 pt-4 pb-4">
 
       <!-- Hợp đồng đang chạy -->
-      <div style="margin-bottom:20px">
+      <div style="margin-bottom:16px">
         <div style="font-size:.72rem;font-weight:700;color:#a09c96;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">🚦 Hôm nay</div>
         <div id="active-contracts">
           <div class="card" style="padding:20px;text-align:center;color:#a09c96">
@@ -247,6 +272,15 @@
             <div style="font-size:.82rem">Chưa có chuyến hôm nay</div>
           </div>
         </div>
+      </div>
+
+      <!-- Tiến trình báo cáo (hiện khi đang chạy) -->
+      <div id="trip-progress" style="display:none;margin-bottom:16px"></div>
+
+      <!-- Thông tin bảo dưỡng xe (hiện sau login) -->
+      <div id="xe-info-section" style="display:none;margin-bottom:16px">
+        <div style="font-size:.72rem;font-weight:700;color:#a09c96;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">🔧 Tình trạng xe</div>
+        <div id="xe-info-card"></div>
       </div>
 
       <!-- Báo cáo nhanh -->
@@ -826,6 +860,8 @@ function populateApp(){
   // Gọi ngay với mock data, rồi async Supabase override
   setReportButtons(todayHDs.length > 0, false);
   renderActiveContracts(todayHDs);
+  // Load thông tin xe từ SESSION (sẽ override khi Supabase trả về)
+  if(d.bienXe && d.bienXe!=='—') loadXeInfo(d.bienXe);
 
   // Async load từ Supabase nếu có
   // Dùng 2 bước: 1) detect contract (không cần cột mới), 2) fetch ngay_di/ngay_ve nếu cột tồn tại
@@ -867,6 +903,16 @@ function populateApp(){
       var hasDangChay = sbHDs.some(function(h){ return h.tt === 'dang_chay'; });
       var hasChoXe    = sbHDs.some(function(h){ return h.tt === 'cho_xe'; });
       setReportButtons(hasDangChay, hasChoXe);
+
+      // ── Load tiến trình báo cáo cho chuyến đang chạy ──
+      var activeSo = sbHDs.find(function(h){ return h.tt==='dang_chay'; });
+      if(activeSo) loadTripProgress(activeSo.so);
+      else document.getElementById('trip-progress').style.display='none';
+
+      // ── Load thông tin xe ──────────────────────────────
+      var xeBien = d.bienXe && d.bienXe!=='—' ? d.bienXe
+                 : (activeSo ? activeSo.xe : null);
+      if(xeBien) loadXeInfo(xeBien);
 
       // ngay_di/ngay_ve đã được fetch trong query đầu → không cần query riêng nữa
     }).catch(function(e){
@@ -1119,6 +1165,157 @@ function calcDuration(ngay_di, ngay_ve){
 // ═══════════════════════════════════════
 // Các loại báo cáo CẦN hợp đồng đang chạy
 var REQUIRES_HD = ['do_dau','km_dau','km_cuoi','hoan_thanh','hop_dong','hanh_khach'];
+var TRIP_REPORTS_DONE = {};   // cache: loai → true, cho chuyến đang chạy
+var XE_INFO_CACHE = null;     // cache thông tin xe
+
+// ═══════════════════════════════════════
+// TRIP PROGRESS STEPPER
+// ═══════════════════════════════════════
+function loadTripProgress(hdSo){
+  if(!hdSo || !SB_URL || !SB_KEY) return;
+  sbGet('bao_cao','select=loai&hd_so=eq.'+encodeURIComponent(hdSo)+'&order=created_at.asc')
+    .then(function(rows){
+      TRIP_REPORTS_DONE = {};
+      (rows||[]).forEach(function(r){ if(r.loai) TRIP_REPORTS_DONE[r.loai]=true; });
+      renderTripProgress();
+      enforceReportOrder();
+    })
+    .catch(function(e){ console.warn('[NK] loadTripProgress:',e.message); });
+}
+
+function renderTripProgress(){
+  var el = document.getElementById('trip-progress');
+  if(!el) return;
+  var steps=[
+    {type:'km_dau',    ico:'🔢', lbl:'Km đầu',    req:true },
+    {type:'km_cuoi',   ico:'🏁', lbl:'Km cuối',   req:false},
+    {type:'hoan_thanh',ico:'✅', lbl:'Hoàn thành', req:false},
+  ];
+  var done=TRIP_REPORTS_DONE;
+  var html='<div class="card" style="padding:14px 16px">'
+    +'<div style="font-size:.64rem;font-weight:700;color:#a09c96;letter-spacing:.6px;margin-bottom:10px">📍 TIẾN TRÌNH CHUYẾN ĐI</div>'
+    +'<div style="display:flex;align-items:center">';
+  steps.forEach(function(s,i){
+    var isDone=!!done[s.type];
+    var isLocked=(s.type==='hoan_thanh')&&!done['km_dau'];
+    // xác định class
+    var cls= isDone   ? 'step-done'
+           : isLocked ? 'step-locked'
+           : (i===0||(i>0&&done[steps[i-1].type])) ? 'step-next'
+           : 'step-pending';
+    var ico= isDone ? '✓' : isLocked ? '🔒' : s.ico;
+    html+='<div class="progress-step '+cls+'">'
+      +'<div class="step-icon">'+ico+'</div>'
+      +'<div class="step-lbl">'+s.lbl+(isLocked?'<br><span style="color:#ef4444;font-size:.56rem">Cần Km đầu</span>':'')+'</div>'
+      +'</div>';
+    if(i<steps.length-1){
+      html+='<div class="step-arrow '+(isDone?'done':'pending')+'"></div>';
+    }
+  });
+  html+='</div></div>';
+  el.innerHTML=html;
+  el.style.display='block';
+}
+
+function enforceReportOrder(){
+  // Khóa thêm nút "Hoàn thành" nếu chưa có km_dau, dù đang có HĐ active
+  var hasKmDau = !!TRIP_REPORTS_DONE['km_dau'];
+  document.querySelectorAll('.rpt-btn[data-type="hoan_thanh"]').forEach(function(btn){
+    if(HAS_ACTIVE_HD && !hasKmDau){
+      btn.disabled = true;
+      btn.style.opacity = '0.38';
+      btn.style.cursor  = 'not-allowed';
+      btn.style.filter  = 'grayscale(60%)';
+      btn.title = 'Cần gửi báo cáo Km đầu trước';
+    }
+  });
+}
+
+// ═══════════════════════════════════════
+// XE INFO — ĐĂNG KIỂM / BẢO HIỂM / NHỚT
+// ═══════════════════════════════════════
+function driverFmtDate(str){
+  if(!str) return '—';
+  var p=str.split('-');
+  return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : str;
+}
+
+function loadXeInfo(bienXe){
+  if(!bienXe||bienXe==='—'||!SB_URL||!SB_KEY) return;
+  // Thử lấy cả km_thay_nhot — nếu cột chưa có thì fallback select cơ bản
+  sbGet('xe','select=bien_so,loai_xe,km_chay,han_dk,han_bh,km_thay_nhot&bien_so=eq.'+encodeURIComponent(bienXe)+'&limit=1')
+    .then(function(rows){
+      if(!rows||!rows.length) return;
+      XE_INFO_CACHE=rows[0];
+      renderXeInfoCard(rows[0]);
+    })
+    .catch(function(){
+      // Fallback nếu cột km_thay_nhot chưa tồn tại
+      sbGet('xe','select=bien_so,loai_xe,km_chay,han_dk,han_bh&bien_so=eq.'+encodeURIComponent(bienXe)+'&limit=1')
+        .then(function(rows2){
+          if(!rows2||!rows2.length) return;
+          XE_INFO_CACHE=rows2[0];
+          renderXeInfoCard(rows2[0]);
+        })
+        .catch(function(e){ console.warn('[NK] loadXeInfo:',e.message); });
+    });
+}
+
+function renderXeInfoCard(x){
+  var sec=document.getElementById('xe-info-section');
+  var el =document.getElementById('xe-info-card');
+  if(!sec||!el||!x) return;
+  var today=new Date(); today.setHours(0,0,0,0);
+  function daysLeft(dateStr){
+    if(!dateStr) return null;
+    var d=new Date(dateStr); d.setHours(0,0,0,0);
+    return Math.round((d-today)/864e5);
+  }
+  function cntBadge(days){
+    if(days===null) return '<span class="xe-info-cnt" style="color:#a09c96">—</span>';
+    if(days<=0)     return '<span class="xe-info-cnt xe-cnt-bad">HẾT HẠN ⚠️</span>';
+    var cls=days<=30?'xe-cnt-bad':days<=60?'xe-cnt-warn':'xe-cnt-ok';
+    return '<span class="xe-info-cnt '+cls+'">còn '+days+' ngày</span>';
+  }
+  var dkDays=daysLeft(x.han_dk);
+  var bhDays=daysLeft(x.han_bh);
+  // Thay nhớt: next = km_thay_nhot + 10.000
+  var kmHT=Number(x.km_chay)||0;
+  var kmNhot=x.km_thay_nhot!=null ? Number(x.km_thay_nhot) : null;
+  var nextNhot=kmNhot!=null ? kmNhot+10000 : null;
+  var conNhot=nextNhot!=null ? nextNhot-kmHT : null;
+  var oilBadge;
+  if(kmNhot==null){
+    oilBadge='<span class="xe-info-cnt" style="color:#a09c96;font-size:.6rem">Chưa có<br>dữ liệu</span>';
+  } else if(conNhot<=0){
+    oilBadge='<span class="xe-info-cnt xe-cnt-bad">ĐÃ ĐẾN HẠN ⚠️</span>';
+  } else {
+    var ocls=conNhot<=500?'xe-cnt-bad':conNhot<=1500?'xe-cnt-warn':'xe-cnt-ok';
+    oilBadge='<span class="xe-info-cnt '+ocls+'">còn '+conNhot.toLocaleString('vi-VN')+' km</span>'
+      +'<div style="font-size:.58rem;color:#a09c96;margin-top:1px">đến '+nextNhot.toLocaleString('vi-VN')+' km</div>';
+  }
+  el.innerHTML='<div class="card" style="padding:12px 14px">'
+    +'<div style="font-size:.64rem;font-weight:700;color:#a09c96;letter-spacing:.6px;margin-bottom:10px">🚌 XE '+x.bien_so+' · '+( x.loai_xe||'')+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+      +'<div class="xe-info-item">'
+        +'<div class="xe-info-lbl">ĐĂNG KIỂM</div>'
+        +'<div class="xe-info-date">'+driverFmtDate(x.han_dk)+'</div>'
+        +cntBadge(dkDays)
+      +'</div>'
+      +'<div class="xe-info-item">'
+        +'<div class="xe-info-lbl">BẢO HIỂM</div>'
+        +'<div class="xe-info-date">'+driverFmtDate(x.han_bh)+'</div>'
+        +cntBadge(bhDays)
+      +'</div>'
+      +'<div class="xe-info-item">'
+        +'<div class="xe-info-lbl">THAY NHỚT</div>'
+        +'<div class="xe-info-date" style="font-size:.64rem">lần cuối:<br>'+( kmNhot!=null ? kmNhot.toLocaleString('vi-VN')+' km' : '—')+'</div>'
+        +oilBadge
+      +'</div>'
+    +'</div>'
+  +'</div>';
+  sec.style.display='block';
+}
 
 function setReportButtons(hasDangChay, hasChoXe){
   HAS_ACTIVE_HD = !!hasDangChay;
@@ -1489,8 +1686,20 @@ async function submitReport(){
     }
 
     var type = MODAL_TITLES[CURRENT_REPORT] || CURRENT_REPORT;
+    var reportedType = CURRENT_REPORT; // lưu lại trước khi closeModal reset về null
     closeModal();
     showToast('✅ Đã gửi '+type+' · '+PHOTOS.length+' ảnh');
+
+    // ── Refresh tiến trình chuyến đi ─────────────────────────────────────────
+    var runningHD = ACTIVE_HDS.find(function(h){ return h.tt==='dang_chay'; });
+    if(runningHD){
+      // Cập nhật cache local ngay để UI không cần đợi fetch lại
+      TRIP_REPORTS_DONE[reportedType] = true;
+      renderTripProgress();
+      enforceReportOrder();
+      // Đồng thời load lại từ server cho chính xác
+      setTimeout(function(){ loadTripProgress(runningHD.so); }, 800);
+    }
 
   } catch(e){
     showToast('❌ Lỗi: '+e.message);

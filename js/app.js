@@ -181,7 +181,7 @@ function calcDuration(ngay_di,ngay_ve){
   return (nights+1)+'N'+nights+'D';
 }
 function mapTC(r){return{id:r.id,type:r.loai_gd||'thu',loai:r.danh_muc||'',ngay:r.ngay_gd||'',gio:r.gio_gd||'00:00',sotien:Number(r.so_tien)||0,hd:r.hd_so||'',hd_id:r.hd_id||null,httt:r.hinh_thuc||'Tiền mặt',xe:r.bien_so_xe||'',taixe:r.tai_xe||'',kh:r.doi_tac||'',mota:r.mo_ta||''};}
-function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',tt:r.trang_thai||'san_sang'};}
+function mapXe(r){return{id:r.id,bien:r.bien_so||'',loai:r.loai_xe||'',nam:Number(r.nam_sx)||0,km:Number(r.km_chay)||0,dangKiem:r.han_dk||'',baoHiem:r.han_bh||'',kmThayNhot:r.km_thay_nhot!=null?Number(r.km_thay_nhot):null,tt:r.trang_thai||'san_sang'};}
 function mapTX(r){return{id:r.id,ten:r.ho_ten||'',cmnd:r.cmnd||'',bangLai:r.bang_lai||'',ngaySinh:r.ngay_sinh||'',sdt:r.so_dt||'',luong:Number(r.luong_cb)||0,chuyen:0,doanhThu:0};}
 function mapKH(r){return{id:r.id,maKH:r.ma_kh||'',ten:r.ten||'',loai:r.loai||'',sdt:r.so_dt||'',diaChi:r.dia_chi||'',hdCount:0,doanhSo:0};}
 // Sinh mã KH tiếp theo: KH-001, KH-002, ...
@@ -1273,6 +1273,7 @@ function openXeModal(id){
     '<div class="form-row"><div class="fg"><label class="fl">Biển số <span class="req">*</span></label><input class="fc" id="xf-bien" value="'+(x.bien||'')+'" placeholder="51B-12345"></div><div class="fg"><label class="fl">Loại xe <span class="req">*</span></label><input class="fc" id="xf-loai" value="'+(x.loai||'')+'" placeholder="Toyota Hiace"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Năm sản xuất</label><input type="number" class="fc" id="xf-nam" value="'+(x.nam||2020)+'"></div><div class="fg"><label class="fl">Km đã chạy</label><input type="text" inputmode="numeric" class="fc" id="xf-km" value="'+(x.km?fmt(x.km):'')+'" placeholder="0" oninput="fmtInput(this)"></div></div>'+
     '<div class="form-row"><div class="fg"><label class="fl">Hạn đăng kiểm</label><input type="date" class="fc" id="xf-dk" value="'+(x.dangKiem||'')+'"></div><div class="fg"><label class="fl">Hạn bảo hiểm</label><input type="date" class="fc" id="xf-bh" value="'+(x.baoHiem||'')+'"></div></div>'+
+    '<div class="form-row"><div class="fg"><label class="fl">Km thay nhớt gần nhất</label><input type="text" inputmode="numeric" class="fc" id="xf-nhot" value="'+(x.kmThayNhot!=null?fmt(x.kmThayNhot):'')+'" placeholder="VD: 45000" oninput="fmtInput(this)"></div><div class="fg" style="display:flex;align-items:flex-end;padding-bottom:2px"><span style="font-size:.72rem;color:var(--text3)">Hạn thay nhớt tiếp theo = Km trên + 10.000 km</span></div></div>'+
     '<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="xf-tt">'+ttOpts+'</select></div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button><button class="btn btn-accent" onclick="saveXe(\''+(id||'')+'\')">💾 Lưu</button>');
 }
@@ -1280,8 +1281,9 @@ function saveXe(id){
   if(!requireAdmin())return;
   var bien=document.getElementById('xf-bien').value.trim(),loai=document.getElementById('xf-loai').value.trim();
   if(!bien||!loai){toast('Nhập biển số và loại xe!','error');return;}
-  var obj={id:id||uid(),bien:bien,loai:loai,nam:parseInt(document.getElementById('xf-nam').value)||2020,km:readMoney('xf-km'),dangKiem:document.getElementById('xf-dk').value,baoHiem:document.getElementById('xf-bh').value,tt:document.getElementById('xf-tt').value};
-  var row={bien_so:bien,loai_xe:loai,nam_sx:obj.nam,km_chay:obj.km,han_dk:obj.dangKiem||null,han_bh:obj.baoHiem||null,trang_thai:obj.tt};
+  var kmNhotRaw=readMoney('xf-nhot');
+  var obj={id:id||uid(),bien:bien,loai:loai,nam:parseInt(document.getElementById('xf-nam').value)||2020,km:readMoney('xf-km'),dangKiem:document.getElementById('xf-dk').value,baoHiem:document.getElementById('xf-bh').value,kmThayNhot:kmNhotRaw||null,tt:document.getElementById('xf-tt').value};
+  var row={bien_so:bien,loai_xe:loai,nam_sx:obj.nam,km_chay:obj.km,han_dk:obj.dangKiem||null,han_bh:obj.baoHiem||null,km_thay_nhot:obj.kmThayNhot,trang_thai:obj.tt};
   (id?sbPatch('xe',id,row):sbPost('xe',row)).then(function(res){
     if(id)DB.xe=DB.xe.map(function(x){return x.id===id?obj:x;});
     else{if(res&&res[0]&&res[0].id)obj.id=res[0].id;DB.xe.push(obj);}
@@ -2730,19 +2732,35 @@ function openXeDetail(id){
   var kmBaseHTML = '<span id="xe-km-base">'+fmt(x.km)+' km</span>'
     +'<div id="xe-km-extra" style="font-size:.65rem;color:var(--text3);margin-top:2px">⏳ Đang tính...</div>';
 
+  // Thay nhớt
+  var nextNhotKm=x.kmThayNhot!=null?x.kmThayNhot+10000:null;
+  var oilInfo=x.kmThayNhot!=null
+    ?fmtD('')+'<div style="font-size:.65rem;color:var(--text3)">Lần cuối: '+fmt(x.kmThayNhot)+' km</div>'
+     +'<div style="font-size:.65rem;color:'+(nextNhotKm&&x.km>=nextNhotKm-500?'var(--orange)':'var(--green)')+'">Tới hạn: '+fmt(nextNhotKm)+' km</div>'
+    :'<span style="color:var(--text3)">Chưa có dữ liệu</span>';
   var infoRows=[
     ['🚌 Biển số',x.bien],
     ['🏭 Loại xe',x.loai],
     ['📅 Năm SX',x.nam],
     ['🛣️ Km đã chạy', kmBaseHTML],
     ['🔍 Đăng kiểm',fmtD(x.dangKiem)+(dk<60?'<div style="color:var(--orange);font-size:.65rem">⚠ Còn '+dk+' ngày</div>':'')],
-    ['🛡️ Bảo hiểm',fmtD(x.baoHiem)+(bh<60?'<div style="color:var(--orange);font-size:.65rem">⚠ Còn '+bh+' ngày</div>':'')]
+    ['🛡️ Bảo hiểm',fmtD(x.baoHiem)+(bh<60?'<div style="color:var(--orange);font-size:.65rem">⚠ Còn '+bh+' ngày</div>':'')],
+    ['🛢️ Thay nhớt',oilInfo],
   ];
-  var body='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'+infoRows.map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:10px"><div style="font-size:.63rem;color:var(--text3);margin-bottom:3px">'+p[0]+'</div><div style="font-size:.8rem;font-weight:600">'+p[1]+'</div></div>';}).join('')+'</div>'+
+  var body='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'+infoRows.map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:10px"><div style="font-size:.6rem;color:var(--text3);margin-bottom:3px">'+p[0]+'</div><div style="font-size:.78rem;font-weight:600">'+p[1]+'</div></div>';}).join('')+'</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px">'+[['💰 Tổng doanh thu','<span class="amt-pos">+'+fmtM(totalRev)+'</span>'],['💸 Tổng chi phí','<span class="amt-neg">-'+fmtM(totalChi)+'</span>'],['📋 Số HĐ',hdList.length+' hợp đồng']].map(function(p){return'<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:.68rem;color:var(--text3);margin-bottom:4px">'+p[0]+'</div><div style="font-size:.9rem;font-weight:700;font-family:\'DM Mono\',monospace">'+p[1]+'</div></div>';}).join('')+'</div>'+
+    // ── Lịch sử bảo dưỡng ──
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+      +'<div style="font-weight:700;font-size:.82rem">🔧 Lịch sử bảo dưỡng</div>'
+      +(isAdmin()?'<button class="btn btn-ghost btn-sm" onclick="openBaoDuongModal(\''+x.bien+'\')">+ Ghi nhận</button>':'')
+    +'</div>'
+    +'<div id="bd-history" style="margin-bottom:18px"><div style="font-size:.78rem;color:var(--text3);padding:12px 0">⏳ Đang tải...</div></div>'+
+    // ── Lịch sử hợp đồng ──
     '<div style="font-weight:700;font-size:.82rem;margin-bottom:8px">📋 Lịch sử hợp đồng</div>'+
     '<div class="table-wrap"><table class="dt" style="min-width:480px"><thead><tr><th>Số HĐ</th><th>Khách hàng</th><th>Tuyến</th><th>Ngày</th><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>'+(hdList.length?hdList.map(function(h){return'<tr onclick="closeModal();setTimeout(function(){openHDDetail(\''+h.id+'\')},120)" style="cursor:pointer" title="Xem chi tiết HĐ '+h.so+'"><td><span class="mono" style="color:var(--blue)">'+h.so+'</span></td><td>'+h.kh+'</td><td style="color:var(--text2);font-size:.74rem">'+h.tuyen+'</td><td><span class="mono">'+fmtD(h.ngay)+'</span></td><td><span class="amt-pos">+'+fmtM(h.giatri)+'</span></td><td>'+(TTMAP[h.tt]||'')+'</td></tr>';}).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Chưa có hợp đồng</td></tr>')+'</tbody></table></div>';
-  showModal('Chi tiết Xe','Biển số: '+x.bien,body,'<button class="btn btn-ghost" onclick="closeModal()">Đóng</button><button class="btn btn-green" onclick="closeModal();exportXeReport(\''+id+'\')">📥 Xuất báo cáo xe</button>');
+  showModal('Chi tiết Xe','Biển số: '+x.bien,body,'<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'+(isAdmin()?'<button class="btn btn-ghost" onclick="openBaoDuongModal(\''+x.bien+'\')">🔧 Ghi bảo dưỡng</button>':'')+'<button class="btn btn-green" onclick="closeModal();exportXeReport(\''+id+'\')">📥 Xuất BC</button>');
+  // Async load bảo dưỡng history + km stats
+  loadBaoDuongHistory(x.bien);
 
   // ── Async: tính tổng km từ bao_cao (km_cuoi - km_dau theo từng HĐ) ──────
   loadXeKmStats(x.km, x.bien, hdDone.length);
@@ -2814,6 +2832,88 @@ function loadXeKmStats(baseKm, bienSo, hdDoneCount){
     }
   }).catch(function(){
     if(extraEl) extraEl.textContent = '(Km lúc đăng ký ban đầu)';
+  });
+}
+
+// ── Lịch sử bảo dưỡng (bao_duong_lich_su) ──────────────────────────────────
+var BD_LOAI_MAP={dang_kiem:'🔍 Đăng kiểm',bao_hiem:'🛡️ Bảo hiểm',thay_nhot:'🛢️ Thay nhớt',sua_chua:'🔧 Sửa chữa',khac:'📝 Khác'};
+
+function loadBaoDuongHistory(bienSo){
+  var el=document.getElementById('bd-history'); if(!el) return;
+  if(!SB_URL){ el.innerHTML='<div style="font-size:.75rem;color:var(--text3)">Không có dữ liệu offline</div>'; return; }
+  sbFetch('bao_duong_lich_su','bien_so_xe=eq.'+encodeURIComponent(bienSo)+'&order=ngay.desc&limit=20')
+    .then(function(rows){
+      var bdEl=document.getElementById('bd-history'); if(!bdEl) return;
+      if(!rows||!rows.length){
+        bdEl.innerHTML='<div style="font-size:.75rem;color:var(--text3);padding:8px 0">Chưa có lịch sử bảo dưỡng. Bấm "+ Ghi nhận" để thêm.</div>';
+        return;
+      }
+      bdEl.innerHTML='<div class="table-wrap"><table class="dt" style="min-width:400px"><thead><tr><th>Ngày</th><th>Loại</th><th>Km</th><th>Ghi chú</th></tr></thead><tbody>'
+        +rows.map(function(r){
+          return'<tr><td><span class="mono">'+fmtD(r.ngay)+'</span></td>'
+            +'<td>'+(BD_LOAI_MAP[r.loai]||r.loai)+'</td>'
+            +'<td>'+(r.km?'<span class="mono">'+fmt(r.km)+' km</span>':'—')+'</td>'
+            +'<td style="font-size:.75rem;color:var(--text2)">'+(r.ghi_chu||'—')+'</td>'
+          +'</tr>';
+        }).join('')
+      +'</tbody></table></div>';
+    })
+    .catch(function(e){
+      var bdEl=document.getElementById('bd-history'); if(!bdEl) return;
+      // Bảng chưa tồn tại → hướng dẫn tạo
+      if(e.message&&e.message.indexOf('42P01')>-1){
+        bdEl.innerHTML='<div style="font-size:.74rem;color:var(--orange);padding:8px;background:var(--surface2);border-radius:6px">⚠️ Bảng <code>bao_duong_lich_su</code> chưa được tạo trên Supabase.<br>Vào mục Cài đặt → SQL Editor và chạy lệnh tạo bảng.</div>';
+      } else {
+        bdEl.innerHTML='<div style="font-size:.75rem;color:var(--text3)">'+e.message+'</div>';
+      }
+    });
+}
+
+function openBaoDuongModal(bienSo){
+  if(!requireAdmin()) return;
+  var today=new Date().toISOString().slice(0,10);
+  var loaiOpts=Object.keys(BD_LOAI_MAP).map(function(v){return'<option value="'+v+'">'+BD_LOAI_MAP[v]+'</option>';}).join('');
+  showModal('🔧 Ghi nhận bảo dưỡng',bienSo,
+    '<div class="form-row"><div class="fg"><label class="fl">Loại <span class="req">*</span></label><select class="fc" id="bd-loai">'+loaiOpts+'</select></div>'
+    +'<div class="fg"><label class="fl">Ngày <span class="req">*</span></label><input type="date" class="fc" id="bd-ngay" value="'+today+'"></div></div>'
+    +'<div class="form-row"><div class="fg"><label class="fl">Số km đồng hồ xe</label><input type="text" inputmode="numeric" class="fc" id="bd-km" placeholder="VD: 45000" oninput="fmtInput(this)"></div>'
+    +'<div class="fg"><label class="fl">Ghi chú</label><input class="fc" id="bd-note" placeholder="Nơi thực hiện, hạn mới..."></div></div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Hủy</button>'
+    +'<button class="btn btn-accent" onclick="saveBaoDuong(\''+bienSo+'\')">💾 Lưu</button>'
+  );
+}
+
+function saveBaoDuong(bienSo){
+  if(!requireAdmin()) return;
+  var loai=document.getElementById('bd-loai').value;
+  var ngay=document.getElementById('bd-ngay').value;
+  if(!loai||!ngay){ toast('Chọn loại và ngày!','error'); return; }
+  var km=readMoney('bd-km')||null;
+  var note=(document.getElementById('bd-note').value||'').trim()||null;
+  var row={bien_so_xe:bienSo,loai:loai,ngay:ngay,km:km,ghi_chu:note};
+  // Nếu thay nhớt → đồng thời cập nhật km_thay_nhot trong bảng xe
+  var patchXe=(loai==='thay_nhot'&&km!=null)
+    ? sbFetch('xe','bien_so=eq.'+encodeURIComponent(bienSo)+'&select=id&limit=1').then(function(rows){
+        if(rows&&rows[0]&&rows[0].id) return sbPatch('xe',rows[0].id,{km_thay_nhot:km});
+      })
+    : Promise.resolve();
+  Promise.all([
+    sbPost('bao_duong_lich_su',row),
+    patchXe
+  ]).then(function(){
+    // Cập nhật local DB nếu thay nhớt
+    if(loai==='thay_nhot'&&km!=null){
+      var xeObj=DB.xe.find(function(v){return v.bien===bienSo;});
+      if(xeObj) xeObj.kmThayNhot=km;
+    }
+    closeModal();
+    toast('✅ Đã ghi nhận bảo dưỡng','success');
+  }).catch(function(e){
+    if(e.message&&e.message.indexOf('42P01')>-1){
+      toast('⚠️ Bảng bao_duong_lich_su chưa được tạo. Xem hướng dẫn trong mục Cài đặt.','error',6000);
+    } else {
+      toast('❌ '+e.message,'error');
+    }
   });
 }
 

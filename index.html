@@ -246,7 +246,7 @@
       </div>
     </div>
     <div class="page" id="page-caidat">
-      <div class="card" style="max-width:560px">
+      <div class="card" style="max-width:560px;margin-bottom:20px">
         <div class="card-header"><div class="card-title">⚙️ Thông tin công ty</div></div>
         <div class="modal-body">
           <div class="fg"><label class="fl">Tên công ty</label><input class="fc" id="cd-ten" placeholder="Tên công ty"></div>
@@ -257,6 +257,31 @@
           </div>
           <div class="fg"><label class="fl">Địa chỉ</label><input class="fc" id="cd-diachi" placeholder="Địa chỉ"></div>
           <button class="btn btn-accent" onclick="saveCaiDat()">💾 Lưu thay đổi</button>
+        </div>
+      </div>
+      <!-- Hướng dẫn tạo bảng Supabase -->
+      <div class="card" style="max-width:560px">
+        <div class="card-header"><div><div class="card-title">🗄️ Cấu trúc Database</div><div class="card-sub">Chạy SQL này trên Supabase để kích hoạt tính năng lịch sử bảo dưỡng</div></div></div>
+        <div style="padding:16px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:10px">Vào <strong>Supabase → SQL Editor</strong> và chạy lệnh sau:</div>
+          <pre id="sql-guide" style="background:#1e1e2e;color:#cdd6f4;border-radius:10px;padding:14px;font-size:.72rem;overflow-x:auto;line-height:1.6;margin:0;white-space:pre-wrap">-- Bảng lịch sử bảo dưỡng xe
+CREATE TABLE IF NOT EXISTS bao_duong_lich_su (
+  id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  bien_so_xe  text NOT NULL,
+  loai        text NOT NULL, -- dang_kiem | bao_hiem | thay_nhot | sua_chua | khac
+  ngay        date NOT NULL,
+  km          integer,
+  ghi_chu     text,
+  created_at  timestamptz DEFAULT now()
+);
+
+-- Thêm cột km_thay_nhot vào bảng xe (nếu chưa có)
+ALTER TABLE xe ADD COLUMN IF NOT EXISTS km_thay_nhot integer;
+
+-- Index để query nhanh theo biển số
+CREATE INDEX IF NOT EXISTS idx_bd_bien_so ON bao_duong_lich_su(bien_so_xe);
+CREATE INDEX IF NOT EXISTS idx_bd_loai    ON bao_duong_lich_su(loai);</pre>
+          <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="navigator.clipboard.writeText(document.getElementById('sql-guide').textContent).then(function(){toast('✅ Đã copy SQL','success');})">📋 Copy SQL</button>
         </div>
       </div>
     </div>
