@@ -1130,7 +1130,42 @@ function saveHD(id) {
 }
 function deleteHD(id) {
   if (!requireAdmin()) return;
-  sbDel('hop_dong',id).then(function(){DB.hopDong=DB.hopDong.filter(function(x){return x.id!==id;});updateBadges();renderHD();toast('🗑️ Đã xóa','info');}).catch(function(e){toast('❌ '+e.message,'error');});
+  var h = DB.hopDong.find(function(x){ return x.id === id; });
+  if(!h) return;
+
+  // Xóa theo thứ tự: bao_cao → unlink thu_chi → hop_dong
+  var chain = Promise.resolve();
+
+  // 1. Xóa tất cả bao_cao liên quan (theo hd_so)
+  if(SB_URL && SB_KEY && h.so){
+    chain = chain.then(function(){
+      return fetch(SB_URL+'/rest/v1/bao_cao?hd_so=eq.'+encodeURIComponent(h.so),
+        {method:'DELETE', headers:SB_H});
+    });
+  }
+
+  // 2. Unlink thu_chi: set hd_id = null (giữ lịch sử tài chính, bỏ FK constraint)
+  if(SB_URL && SB_KEY){
+    chain = chain.then(function(){
+      return fetch(SB_URL+'/rest/v1/thu_chi?hd_id=eq.'+id,
+        {method:'PATCH', headers:Object.assign({},SB_H,{'Prefer':'return=minimal'}),
+         body:JSON.stringify({hd_id: null})});
+    }).then(function(){
+      // Cập nhật local DB
+      DB.thuChi.forEach(function(t){ if(t.hd_id === id){ t.hd_id = null; t.hd = ''; } });
+    });
+  }
+
+  // 3. Xóa hop_dong
+  chain = chain.then(function(){
+    return sbDel('hop_dong', id);
+  }).then(function(){
+    DB.hopDong = DB.hopDong.filter(function(x){ return x.id !== id; });
+    closeModal();
+    updateBadges();
+    renderHD();
+    toast('🗑️ Đã xóa hợp đồng', 'info');
+  }).catch(function(e){ toast('❌ ' + e.message, 'error'); });
 }
 
 // ═══════════════════════════════════════
