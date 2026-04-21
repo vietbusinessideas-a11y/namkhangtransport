@@ -49,9 +49,16 @@ function initAuth(){
   document.getElementById('userName').textContent=CURRENT_USER.name||CURRENT_USER.email||'Người dùng';
   document.getElementById('userAvatar').textContent=CURRENT_USER.initial||((CURRENT_USER.name||CURRENT_USER.email||'U').substring(0,2).toUpperCase());
   document.getElementById('userRole').textContent=isAdmin()?'👑 Admin':'👤 Nhân viên';
-  if(!isAdmin()){
+  if(isAdmin()){
+    // Hiện mục Duyệt BC ngay khi xác nhận là admin
+    var navDuyet=document.getElementById('nav-duyet-bc');
+    if(navDuyet) navDuyet.style.display='';
+  } else {
     var canh=document.querySelector('.nav-item[data-page="caidat"]');
     if(canh&&canh.closest('.nav-section'))canh.closest('.nav-section').remove();
+    // Ẩn mục Duyệt BC với non-admin
+    var navDuyetHide=document.getElementById('nav-duyet-bc');
+    if(navDuyetHide) navDuyetHide.style.display='none';
   }
   return true;
 }
@@ -2535,7 +2542,18 @@ function checkPendingBaoCao(){
     updatePendingBadge();
     renderNotifPendingSection();
     renderDuyetBCContent();
-  }).catch(function(e){ console.warn('checkPendingBaoCao:', e.message); });
+  }).catch(function(e){
+    console.warn('checkPendingBaoCao:', e.message);
+    // Cột trang_thai chưa tồn tại → vẫn hiện trang nhưng báo cần migration
+    PENDING_BC = [];
+    var sub = document.getElementById('duyet-bc-sub');
+    if(sub) sub.textContent = 'Cần chạy SQL migration — xem Cài đặt → SQL Guide';
+    var content = document.getElementById('duyet-bc-content');
+    if(content) content.innerHTML = '<div style="padding:32px;text-align:center;color:var(--orange);font-size:.82rem">'
+      +'⚠️ Tính năng duyệt báo cáo cần cập nhật cơ sở dữ liệu.<br><br>'
+      +'Vào <strong>Cài đặt → SQL Guide</strong>, copy và chạy đoạn SQL để kích hoạt.'
+      +'</div>';
+  });
 }
 
 // Cập nhật badge trên topbar + sidebar nav
