@@ -2824,7 +2824,6 @@ function approveBaoCao(bcId){
         ngay_gd:    dateStr,
         gio_gd:     timeStr,
         so_tien:    tienFinal,
-        hd_so:      bc.hd_so      || null,
         hd_id:      hdRec ? hdRec.id : null,
         bien_so_xe: bc.bien_xe    || null,
         tai_xe:     bc.tai_xe_ten || null,
@@ -2832,9 +2831,14 @@ function approveBaoCao(bcId){
         doi_tac:    'Cây xăng',
         mo_ta:      'Nhiên liệu' + (litFinal ? ' '+litFinal+'L' : '') + (bc.hd_so ? ' — '+bc.hd_so : ''),
       };
+      console.log('[approveBaoCao] Inserting thu_chi:', chiPayload);
       return sbPost('thu_chi', chiPayload).then(function(tcRes){
+        console.log('[approveBaoCao] thu_chi insert OK, tcRes:', tcRes);
         var newId = (tcRes && tcRes[0] && tcRes[0].id) ? tcRes[0].id : ('local-'+Date.now());
-        DB.thuChi.unshift(mapTC(Object.assign({id: newId}, chiPayload)));
+        var mapped = mapTC(Object.assign({id: newId}, chiPayload));
+        console.log('[approveBaoCao] mapped TC:', mapped, 'DB.thuChi.length before:', DB.thuChi.length);
+        DB.thuChi.unshift(mapped);
+        console.log('[approveBaoCao] DB.thuChi.length after:', DB.thuChi.length);
         toast('✅ Đã duyệt + tạo phiếu chi '+fmtM(tienFinal), 'success');
       });
     } else {
@@ -2845,14 +2849,17 @@ function approveBaoCao(bcId){
   }).then(function(){
     // 3. Cập nhật cache & UI
     PENDING_BC = PENDING_BC.filter(function(x){ return x.id !== bcId; });
+    SELECTED_BC_IDS.delete(bcId);
     PENDING_EXPAND = null;
     updatePendingBadge();
     renderNotifPendingSection();
     renderDuyetBCContent();
+    // Nếu đang ở trang thu-chi thì refresh ngay
+    if(currentPage === 'thuchi') renderTCAll();
 
   }).catch(function(e){
     console.error('approveBaoCao error:', e);
-    toast('❌ ' + (e.message || 'Lỗi không xác định'), 'error');
+    toast('❌ Duyệt thất bại: ' + (e.message || 'Lỗi không xác định'), 'error');
     if(btnEl){ btnEl.disabled = false; btnEl.textContent = '✅ Duyệt'; }
   });
 }
@@ -2932,7 +2939,6 @@ function bulkApproveBaoCao(){
             ngay_gd:    dateStr,
             gio_gd:     timeStr,
             so_tien:    bc.tong_tien,
-            hd_so:      bc.hd_so      || null,
             hd_id:      hdRec ? hdRec.id : null,
             bien_so_xe: bc.bien_xe    || null,
             tai_xe:     bc.tai_xe_ten || null,
@@ -2961,6 +2967,7 @@ function bulkApproveBaoCao(){
     updatePendingBadge();
     renderNotifPendingSection();
     renderDuyetBCContent();
+    if(currentPage === 'thuchi') renderTCAll();
     if(failed === 0){
       toast('✅ Đã duyệt '+done+' báo cáo', 'success');
     } else {
