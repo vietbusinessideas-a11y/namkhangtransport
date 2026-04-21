@@ -82,6 +82,8 @@
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="topbar-right" id="topbarActions"></div>
+      <!-- Nút giá dầu — permanent DOM element, hiện/ẩn theo trang -->
+      <button id="gia-dau-btn" onclick="openGiaDauModal()" style="display:none;border:1.5px solid #f59e0b;background:#fffbeb;color:#92400e;font-weight:700;padding:6px 12px;border-radius:8px;font-size:.78rem;cursor:pointer;font-family:inherit">⛽ Giá dầu</button>
       <button id="pending-bc-btn" onclick="openPendingModal()" style="display:none;position:relative;padding:6px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#dc2626;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit">📋 Chờ duyệt <span id="pending-bc-badge" style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 6px;font-size:.7rem;margin-left:2px">0</span></button>
       <button class="btn btn-ghost" style="position:relative;padding:7px 10px" onclick="toggleNotifPanel()" id="notifBtn">🔔<span id="notifDot" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid #fff"></span></button>
     </div>

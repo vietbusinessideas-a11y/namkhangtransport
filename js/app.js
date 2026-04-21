@@ -1,4 +1,10 @@
 // ═══════════════════════════════════════
+// APP VERSION — dùng để kiểm tra cache
+// ═══════════════════════════════════════
+var APP_VERSION = '2026-04-21-v3';
+console.log('[NK] app.js loaded — version', APP_VERSION);
+
+// ═══════════════════════════════════════
 // SUPABASE — Config load từ /api/config
 // ═══════════════════════════════════════
 var SB_URL='', SB_KEY='';
@@ -459,6 +465,9 @@ function _navInternal(page){
   document.getElementById('pageTitle').textContent=m.title;
   document.getElementById('pageSub').textContent=m.sub;
   document.getElementById('topbarActions').innerHTML=m.actions();
+  // Hiển thị nút Giá dầu chỉ khi ở trang Xe & Tài xế
+  var gdBtn=document.getElementById('gia-dau-btn');
+  if(gdBtn) gdBtn.style.display=(page==='xe')?'inline-block':'none';
   if(window.innerWidth<768)closeSidebar();
   renderCurrentPage();
 }
@@ -467,7 +476,7 @@ var PAGE_META={
   dashboard:{title:'Dashboard',sub:'',actions:function(){return'';}},
   hopdong:{title:'Hợp đồng',sub:'Quản lý hợp đồng vận chuyển',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="openHDModal()">＋ Thêm hợp đồng</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportHD()">📥 Xuất Excel</button>';}},
   khachhang:{title:'Khách hàng',sub:'Danh sách đối tác',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="openKHModal()">＋ Thêm KH</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportKH()">📥 Xuất Excel</button>';}},
-  xe:{title:'Xe & Tài xế',sub:'Quản lý phương tiện',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="xeTab===\'xe\'?openXeModal():openTXModal()">＋ Thêm mới</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportExcel()">📥 Xuất Excel</button>'+'<button id="gia-dau-btn" class="btn btn-ghost btn-sm" onclick="openGiaDauModal()" style="border:1.5px solid #f59e0b;background:#fffbeb;color:#92400e;font-weight:700">⛽ Giá dầu</button>';}},
+  xe:{title:'Xe & Tài xế',sub:'Quản lý phương tiện',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="xeTab===\'xe\'?openXeModal():openTXModal()">＋ Thêm mới</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportExcel()">📥 Xuất Excel</button>';}},
   thuchi:{title:'Thu Chi',sub:'Ghi nhận doanh thu & chi phí',actions:function(){return'<button class="btn btn-green" onclick="openTCModal(\'thu\')">＋ Ghi thu</button><button class="btn btn-red" onclick="openTCModal(\'chi\')">＋ Ghi chi</button><button class="btn btn-ghost btn-sm" onclick="chotLuongThang()" title="Tạo phiếu chi lương hàng loạt cho tài xế">💰 Chốt lương</button><button class="btn btn-ghost btn-sm" onclick="exportTC()">📥 Xuất Excel</button>';}},
   baocao:{title:'Báo cáo & Thống kê',sub:'Phân tích tài chính',actions:function(){return'';}},
   caidat:{title:'Cài đặt',sub:'Thông tin hệ thống',actions:function(){return'';}},
@@ -1400,15 +1409,21 @@ function saveKHEdit(id) {
 // GIÁ DẦU TOÀN HỆ THỐNG
 // ═══════════════════════════════════════
 function updateGiaDauBtn(){
-  // Nút nằm trong topbarActions — chỉ hiện khi đang ở trang xe
+  // Nút là permanent DOM element trong topbar — luôn tồn tại trong DOM
   var btn = document.getElementById('gia-dau-btn');
   if(!btn) return;
   var cur = getCurrentGiaDau();
-  if(cur){ btn.innerHTML = '⛽ <strong>'+fmt(cur.gia)+'</strong>đ/L'; btn.title = 'Giá từ '+fmtD(cur.ngay); }
-  else    { btn.innerHTML = '⛽ Giá dầu'; }
+  if(cur){
+    btn.innerHTML = '⛽ <strong>'+fmt(cur.gia)+'</strong>đ/L';
+    btn.title = 'Giá dầu tham chiếu — áp dụng từ '+fmtD(cur.ngay)+'. Click để xem/cập nhật';
+  } else {
+    btn.innerHTML = '⛽ Giá dầu';
+    btn.title = 'Chưa có giá dầu tham chiếu — click để thiết lập';
+  }
 }
 
 function openGiaDauModal(){
+  console.log('[GiaDau] openGiaDauModal called, DB.giaDau.length =', DB.giaDau.length);
   var cur = getCurrentGiaDau();
   var curStr = cur ? fmt(cur.gia)+' đ/lít — áp dụng từ '+fmtD(cur.ngay) : 'Chưa có giá tham chiếu';
   var today = new Date().toISOString().slice(0,10);
@@ -3767,6 +3782,7 @@ function loadXeKmStats(baseKm, bienSo, hdDoneCount){
   }
 
   var bienEnc = encodeURIComponent(bienSo);
+  console.log('[KmStats] Querying for bien_xe =', bienSo, '(encoded:', bienEnc+')');
 
   // Lấy km_cuoi mới nhất (= số đọc ODO hiện tại) và km_dau đầu tiên (= km lúc bắt đầu dùng)
   Promise.all([
@@ -3775,6 +3791,7 @@ function loadXeKmStats(baseKm, bienSo, hdDoneCount){
   ]).then(function(res){
     var latestCuoi = res[0] && res[0][0] ? res[0][0] : null;
     var firstDau   = res[1] && res[1][0] ? res[1][0] : null;
+    console.log('[KmStats] km_cuoi result:', res[0], '| km_dau result:', res[1]);
 
     if(!extraEl) return;  // modal đã đóng
 
@@ -3786,11 +3803,15 @@ function loadXeKmStats(baseKm, bienSo, hdDoneCount){
       var drivenStr = kmDriven > 0
         ? '<span style="color:var(--accent)">↑ Đã chạy thêm '+fmt(kmDriven)+' km kể từ lúc đăng ký</span>'
         : '';
-      extraEl.innerHTML = '<span style="color:var(--text3)">📌 ODO mới nhất từ báo cáo tài xế</span>'
+      extraEl.innerHTML = '<span style="color:var(--text3)">📌 ODO mới nhất từ báo cáo km cuối</span>'
         + (drivenStr ? '<br>'+drivenStr : '');
     } else if(firstDau && Number(firstDau.so_km) > 0){
-      // Có km_dau nhưng chưa có km_cuoi nào
-      extraEl.innerHTML = '<span style="color:var(--text3)">Km lúc đăng ký · Có báo cáo KM đầu, chờ KM cuối</span>';
+      // Có km_dau nhưng chưa có km_cuoi → dùng km_dau làm mốc ODO hiện tại
+      var dauKm = Number(firstDau.so_km);
+      var kmFromDau = dauKm - baseKm;
+      baseEl.textContent = fmt(dauKm) + ' km';
+      extraEl.innerHTML = '<span style="color:#d97706">⏳ ODO từ km đầu · Chờ tài xế báo cáo km cuối</span>'
+        + (kmFromDau > 0 ? '<br><span style="color:var(--text3)">↑ Đã chạy ít nhất '+fmt(kmFromDau)+' km kể từ lúc đăng ký</span>' : '');
     } else if(hdDoneCount > 0){
       // Có HĐ hoàn thành nhưng chưa có báo cáo km nào
       extraEl.innerHTML = '<span style="color:var(--text3)">Km lúc đăng ký · '+hdDoneCount+' HĐ hoàn thành chưa có báo cáo km</span>';
