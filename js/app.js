@@ -3697,58 +3697,37 @@ function loadXeKmStats(baseKm, bienSo, hdDoneCount){
 
   var bienEnc = encodeURIComponent(bienSo);
 
-  // Lấy TẤT CẢ bản ghi km_dau và km_cuoi của xe này
+  // Lấy km_cuoi mới nhất (= số đọc ODO hiện tại) và km_dau đầu tiên (= km lúc bắt đầu dùng)
   Promise.all([
-    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_dau&so_km=not.is.null&select=so_km,hd_so,created_at&order=created_at.asc'),
-    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_cuoi&so_km=not.is.null&select=so_km,hd_so,created_at&order=created_at.asc')
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_cuoi&so_km=not.is.null&trang_thai=neq.tu_choi&select=so_km,hd_so,created_at&order=so_km.desc&limit=1'),
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_dau&so_km=not.is.null&trang_thai=neq.tu_choi&select=so_km,hd_so,created_at&order=so_km.asc&limit=1')
   ]).then(function(res){
-    var dauRows  = res[0] || [];
-    var cuoiRows = res[1] || [];
-
-    // Ghép cặp theo hd_so (nếu có), hoặc theo thứ tự thời gian
-    var totalKmHD = 0;
-    var pairsCount = 0;
-
-    if(dauRows.length && cuoiRows.length){
-      // Nhóm theo hd_so
-      var dauByHD = {}, cuoiByHD = {};
-      dauRows.forEach(function(r){
-        var key = r.hd_so || ('_t_'+r.created_at);
-        if(!dauByHD[key]) dauByHD[key] = r;
-      });
-      cuoiRows.forEach(function(r){
-        var key = r.hd_so || ('_t_'+r.created_at);
-        if(!cuoiByHD[key]) cuoiByHD[key] = r;
-      });
-      // Tính km cho từng cặp có đủ dau + cuoi
-      Object.keys(dauByHD).forEach(function(key){
-        if(cuoiByHD[key]){
-          var diff = Number(cuoiByHD[key].so_km) - Number(dauByHD[key].so_km);
-          if(diff > 0){ totalKmHD += diff; pairsCount++; }
-        }
-      });
-      // Fallback: nếu không ghép được theo hd_so, lấy max_cuoi - min_dau
-      if(pairsCount === 0){
-        var minDau  = Math.min.apply(null, dauRows.map(function(r){return Number(r.so_km);}));
-        var maxCuoi = Math.max.apply(null, cuoiRows.map(function(r){return Number(r.so_km);}));
-        if(maxCuoi > minDau){ totalKmHD = maxCuoi - minDau; pairsCount = 1; }
-      }
-    }
+    var latestCuoi = res[0] && res[0][0] ? res[0][0] : null;
+    var firstDau   = res[1] && res[1][0] ? res[1][0] : null;
 
     if(!extraEl) return;  // modal đã đóng
-    if(totalKmHD > 0){
-      var total = baseKm + totalKmHD;
-      baseEl.textContent = fmt(total) + ' km';
-      extraEl.innerHTML =
-        '<span style="color:var(--text3)">📌 Lúc đăng ký: '+fmt(baseKm)+' km</span><br>'
-        +'<span style="color:var(--accent)">➕ Từ '+pairsCount+' HĐ (báo cáo): '+fmt(totalKmHD)+' km</span>';
+
+    if(latestCuoi && Number(latestCuoi.so_km) > 0){
+      // Có báo cáo km_cuoi → dùng số đọc ODO mới nhất
+      var latestKm = Number(latestCuoi.so_km);
+      var kmDriven = latestKm - baseKm;
+      baseEl.textContent = fmt(latestKm) + ' km';
+      var drivenStr = kmDriven > 0
+        ? '<span style="color:var(--accent)">↑ Đã chạy thêm '+fmt(kmDriven)+' km kể từ lúc đăng ký</span>'
+        : '';
+      extraEl.innerHTML = '<span style="color:var(--text3)">📌 ODO mới nhất từ báo cáo tài xế</span>'
+        + (drivenStr ? '<br>'+drivenStr : '');
+    } else if(firstDau && Number(firstDau.so_km) > 0){
+      // Có km_dau nhưng chưa có km_cuoi nào
+      extraEl.innerHTML = '<span style="color:var(--text3)">Km lúc đăng ký · Có báo cáo KM đầu, chờ KM cuối</span>';
     } else if(hdDoneCount > 0){
-      // Có HĐ hoàn thành nhưng tài xế chưa báo cáo km
+      // Có HĐ hoàn thành nhưng chưa có báo cáo km nào
       extraEl.innerHTML = '<span style="color:var(--text3)">Km lúc đăng ký · '+hdDoneCount+' HĐ hoàn thành chưa có báo cáo km</span>';
     } else {
       extraEl.textContent = '(Km lúc đăng ký ban đầu)';
     }
-  }).catch(function(){
+  }).catch(function(e){
+    console.warn('loadXeKmStats error:', e.message);
     if(extraEl) extraEl.textContent = '(Km lúc đăng ký ban đầu)';
   });
 }
