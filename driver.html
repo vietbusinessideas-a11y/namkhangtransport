@@ -2126,6 +2126,7 @@ async function saveBaoCao(anhUrls){
     anh_urls:       anhUrls,
     gps_lat:        GPS ? GPS.lat : null,
     gps_lng:        GPS ? GPS.lng : null,
+    trang_thai:     'cho_duyet',
   };
   var r = await fetch(SB_URL+'/rest/v1/bao_cao', {
     method:  'POST',

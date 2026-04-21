@@ -33,8 +33,30 @@
 <div class="modal-overlay" id="mainModal" onclick="handleModalBg(event)">
   <div class="modal"><div class="modal-header"><div><div class="modal-title" id="modalTitle"></div><div class="modal-sub" id="modalSub"></div></div><button class="close-btn" onclick="closeModal()">✕</button></div><div class="modal-body" id="modalBody"></div><div class="modal-footer" id="modalFooter"></div></div>
 </div>
+<!-- ═══ MODAL DUYỆT BÁO CÁO ═══ -->
+<div id="pending-bc-modal" style="display:none;position:fixed;inset:0;z-index:1700;background:rgba(0,0,0,.5);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto">
+  <div style="background:#fff;border-radius:16px;max-width:720px;width:100%;margin:48px auto 32px;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+    <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:1rem;font-weight:700">📋 Báo cáo chờ duyệt</div>
+        <div id="pending-bc-subtitle" style="font-size:.72rem;color:var(--text3);margin-top:2px">Đang tải...</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="closePendingModal()" title="Thu nhỏ — báo cáo vẫn chờ duyệt">✕ Đóng tạm</button>
+      </div>
+    </div>
+    <div id="pending-bc-list" style="padding:12px 20px 4px;max-height:65vh;overflow-y:auto"></div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px">
+      <span style="font-size:.72rem;color:var(--text3)">💡 Sau khi duyệt, báo cáo đổ dầu sẽ tự tạo phiếu chi tương ứng.</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost btn-sm" onclick="closePendingModal()">Đóng tạm</button>
+    </div>
+  </div>
+</div>
+
 <div id="notifPanel" style="display:none;position:fixed;top:56px;right:12px;width:360px;max-height:520px;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.15);z-index:300;overflow:hidden;animation:mIn .2s ease">
   <div style="padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><div style="font-size:.9rem;font-weight:700">🔔 Thông báo</div><button onclick="markAllRead()" style="font-size:.72rem;color:var(--accent);background:none;border:none;cursor:pointer;font-weight:600;font-family:inherit">Đánh dấu đã đọc</button></div>
+  <div id="notif-pending-section" style="display:none;border-bottom:1px solid var(--border)"></div>
   <div id="notifList" style="overflow-y:auto;max-height:440px"></div>
 </div>
 <aside class="sidebar" id="sidebar">
@@ -60,6 +82,7 @@
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="topbar-right" id="topbarActions"></div>
+      <button id="pending-bc-btn" onclick="openPendingModal()" style="display:none;position:relative;padding:6px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#dc2626;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit">📋 Chờ duyệt <span id="pending-bc-badge" style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 6px;font-size:.7rem;margin-left:2px">0</span></button>
       <button class="btn btn-ghost" style="position:relative;padding:7px 10px" onclick="toggleNotifPanel()" id="notifBtn">🔔<span id="notifDot" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid #fff"></span></button>
     </div>
   </div>
@@ -299,6 +322,11 @@ ALTER TABLE tai_xe ADD COLUMN IF NOT EXISTS mat_khau text;
 -- Định mức tiêu hao & giá dầu tham chiếu cho từng xe (nếu chưa có)
 ALTER TABLE xe ADD COLUMN IF NOT EXISTS dinh_muc_l100km numeric(5,1);
 ALTER TABLE xe ADD COLUMN IF NOT EXISTS gia_dau_tk      integer;
+
+-- Trạng thái duyệt báo cáo (cho_duyet | da_duyet | tu_choi)
+-- Mặc định 'da_duyet' để không ảnh hưởng dữ liệu cũ
+ALTER TABLE bao_cao ADD COLUMN IF NOT EXISTS trang_thai text DEFAULT 'da_duyet';
+-- Báo cáo mới từ tài xế sẽ được gửi với trang_thai = 'cho_duyet'
 
 -- Index để query nhanh theo biển số
 CREATE INDEX IF NOT EXISTS idx_bd_bien_so ON bao_duong_lich_su(bien_so_xe);

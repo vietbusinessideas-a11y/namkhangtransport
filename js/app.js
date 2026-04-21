@@ -384,7 +384,8 @@ function loadDB(){
     autoTransitionHD().then(function(){
       updateBadges();
       renderCurrentPage();
-      checkOverdueHDAdmin(); // Kiểm tra HĐ quá hạn chưa báo cáo hoàn thành
+      checkOverdueHDAdmin();  // Kiểm tra HĐ quá hạn chưa báo cáo hoàn thành
+      checkPendingBaoCao();   // Kiểm tra báo cáo tài xế chờ duyệt
     });
   }).catch(function(err){
     console.error('SB ERR:',err.message);
@@ -2503,6 +2504,7 @@ function buildNotifs(){
   return items.filter(function(i){return!readIds.has(i.id);}).sort(function(a,b){return a.ts-b.ts;});
 }
 function renderNotifPanel(){
+  renderNotifPendingSection(); // Cập nhật section BC chờ duyệt trong panel
   var items=buildNotifs();var unreadCount=items.length;
   document.getElementById('notifDot').style.display=unreadCount?'':'none';
   var typeColor={urgent:'var(--red)',warn:'var(--orange)',info:'var(--accent)'};
@@ -2516,6 +2518,277 @@ function toggleNotifPanel(){var p=document.getElementById('notifPanel');if(p.sty
 function closeNotifPanel(){document.getElementById('notifPanel').style.display='none';}
 function markAllRead(){buildNotifs().forEach(function(it){readIds.add(it.id);});try{localStorage.setItem('nk_read',JSON.stringify(Array.from(readIds)));}catch(e){}renderNotifPanel();}
 document.addEventListener('click',function(e){var p=document.getElementById('notifPanel');var btn=document.getElementById('notifBtn');if(p&&p.style.display!=='none'&&!p.contains(e.target)&&btn&&!btn.contains(e.target))closeNotifPanel();});
+
+// ═══════════════════════════════════════
+// DUYỆT BÁO CÁO (APPROVAL WORKFLOW)
+// ═══════════════════════════════════════
+var PENDING_BC = [];        // cache danh sách BC chờ duyệt
+var PENDING_EXPAND = null;  // id đang mở rộng trong modal
+
+// Fetch danh sách báo cáo chờ duyệt từ Supabase
+function checkPendingBaoCao(){
+  if(!isAdmin() || !SB_URL || !SB_KEY) return;
+  sbGet('bao_cao',
+    'trang_thai=eq.cho_duyet&order=created_at.desc&limit=50'
+  ).then(function(rows){
+    PENDING_BC = rows || [];
+    updatePendingBadge();
+    renderNotifPendingSection();
+    // Nếu modal đang mở thì reload list
+    var modal = document.getElementById('pending-bc-modal');
+    if(modal && modal.style.display !== 'none') renderPendingBCList();
+  }).catch(function(e){ console.warn('checkPendingBaoCao:', e.message); });
+}
+
+// Cập nhật badge nút "📋 Chờ duyệt" trên topbar
+function updatePendingBadge(){
+  var cnt = PENDING_BC.length;
+  var btn = document.getElementById('pending-bc-btn');
+  var badge = document.getElementById('pending-bc-badge');
+  if(btn){ btn.style.display = cnt ? 'inline-flex' : 'none'; btn.style.alignItems = 'center'; }
+  if(badge) badge.textContent = cnt;
+}
+
+// Hiển thị section BC chờ duyệt trong notification panel
+function renderNotifPendingSection(){
+  var sec = document.getElementById('notif-pending-section');
+  if(!sec) return;
+  var cnt = PENDING_BC.length;
+  if(!cnt){ sec.style.display='none'; return; }
+  sec.style.display = 'block';
+  sec.innerHTML = '<div onclick="openPendingModal();closeNotifPanel()" style="display:flex;align-items:center;gap:12px;padding:13px 18px;cursor:pointer;background:#fef2f2">'
+    +'<div style="width:36px;height:36px;border-radius:10px;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">📋</div>'
+    +'<div style="flex:1"><div style="font-size:.8rem;font-weight:700;color:#dc2626">'+cnt+' báo cáo chờ duyệt</div>'
+    +'<div style="font-size:.72rem;color:#ef4444;margin-top:2px">Bấm để xem và duyệt</div></div>'
+    +'<span style="font-size:.68rem;padding:2px 8px;border-radius:5px;background:#fee2e2;color:#dc2626;font-weight:700">Cần duyệt</span>'
+    +'</div>';
+}
+
+// Mở/đóng modal duyệt
+function openPendingModal(){
+  var el = document.getElementById('pending-bc-modal');
+  if(!el) return;
+  el.style.display = 'flex';
+  PENDING_EXPAND = null;
+  renderPendingBCList();
+}
+function closePendingModal(){
+  var el = document.getElementById('pending-bc-modal');
+  if(el) el.style.display = 'none';
+}
+document.addEventListener('click', function(e){
+  var modal = document.getElementById('pending-bc-modal');
+  if(!modal || modal.style.display === 'none') return;
+  if(e.target === modal) closePendingModal();
+});
+
+// Render danh sách BC chờ duyệt vào modal
+function renderPendingBCList(){
+  var sub = document.getElementById('pending-bc-subtitle');
+  var list = document.getElementById('pending-bc-list');
+  if(!list) return;
+  var cnt = PENDING_BC.length;
+  if(sub) sub.textContent = cnt ? cnt + ' báo cáo đang chờ xem xét' : 'Không có báo cáo nào';
+  if(!cnt){
+    list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:.85rem">✅ Tất cả báo cáo đã được duyệt</div>';
+    return;
+  }
+  var loaiLabel = {km_dau:'🔢 KM Đầu', km_cuoi:'🏁 KM Cuối', do_dau:'⛽ Đổ dầu', hoan_thanh:'✅ Hoàn thành', thay_nhot:'🔧 Thay nhớt', bao_cao_khac:'📄 Báo cáo khác'};
+  var loaiBg = {km_dau:'#eff6ff', km_cuoi:'#f0fdf4', do_dau:'#fffbeb', hoan_thanh:'#f0fdf4', thay_nhot:'#f5f3ff', bao_cao_khac:'#f8fafc'};
+  var loaiClr = {km_dau:'#1d4ed8', km_cuoi:'#16a34a', do_dau:'#d97706', hoan_thanh:'#16a34a', thay_nhot:'#7c3aed', bao_cao_khac:'#64748b'};
+  list.innerHTML = PENDING_BC.map(function(bc){
+    var isOpen = PENDING_EXPAND === bc.id;
+    var dt = bc.created_at ? new Date(bc.created_at) : null;
+    var dtStr = dt ? (dt.getDate().toString().padStart(2,'0')+'/'+(dt.getMonth()+1).toString().padStart(2,'0')+'/'+dt.getFullYear()
+      +' '+dt.getHours().toString().padStart(2,'0')+':'+dt.getMinutes().toString().padStart(2,'0')) : '—';
+    var info = [];
+    if(bc.so_km) info.push('KM: '+bc.so_km.toLocaleString('vi-VN'));
+    if(bc.so_lit) info.push(bc.so_lit.toLocaleString('vi-VN',{maximumFractionDigits:1})+' L');
+    if(bc.tong_tien) info.push(fmtM(bc.tong_tien));
+    var infoStr = info.join(' · ') || 'Chưa có số liệu';
+    var lbl = loaiLabel[bc.loai] || bc.loai;
+    var bg  = loaiBg[bc.loai]  || '#f8fafc';
+    var clr = loaiClr[bc.loai] || '#64748b';
+    var txName = bc.tai_xe_ten || '—';
+    var bienXe = bc.bien_xe || '—';
+    var hdSo   = bc.hd_so   || 'Chưa gắn HĐ';
+
+    var detailHtml = '';
+    if(isOpen){
+      // Ảnh
+      var anhHtml = '';
+      if(bc.anh_urls && bc.anh_urls.length){
+        anhHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+          + bc.anh_urls.map(function(u){
+            return '<a href="'+u+'" target="_blank" style="display:block">'
+              +'<img src="'+u+'" style="width:100px;height:75px;object-fit:cover;border-radius:8px;border:2px solid var(--border);cursor:zoom-in"></a>';
+          }).join('')
+          +'</div>';
+      } else {
+        anhHtml = '<div style="font-size:.72rem;color:var(--text3);margin-bottom:10px">📷 Không có ảnh đính kèm</div>';
+      }
+      // Form chỉnh sửa số liệu
+      var fieldsHtml = '';
+      if(bc.loai === 'km_dau' || bc.loai === 'km_cuoi'){
+        fieldsHtml = '<div class="form-row"><div class="fg"><label class="fl">Số KM (đồng hồ ODO)</label>'
+          +'<input type="text" inputmode="numeric" class="fc" id="pbc-km-'+bc.id+'" '
+          +'value="'+(bc.so_km ? bc.so_km.toLocaleString('vi-VN') : '')+'" placeholder="VD: 90.000" oninput="fmtInput(this)"></div></div>';
+      } else if(bc.loai === 'do_dau'){
+        fieldsHtml = '<div class="form-row">'
+          +'<div class="fg"><label class="fl">Số lít</label>'
+          +'<input type="text" inputmode="decimal" class="fc" id="pbc-lit-'+bc.id+'" '
+          +'value="'+(bc.so_lit!=null ? bc.so_lit.toLocaleString('vi-VN',{maximumFractionDigits:1}).replace('.',',') : '')+'" placeholder="VD: 66,5" oninput="fmtLitInput(this)"></div>'
+          +'<div class="fg"><label class="fl">Tổng tiền</label>'
+          +'<input type="text" inputmode="numeric" class="fc" id="pbc-tien-'+bc.id+'" '
+          +'value="'+(bc.tong_tien ? bc.tong_tien.toLocaleString('vi-VN') : '')+'" placeholder="VD: 1.452.000" oninput="fmtInput(this)"></div>'
+          +'</div>';
+      }
+      if(bc.ghi_chu){
+        fieldsHtml += '<div class="fg" style="margin-top:6px"><label class="fl">Ghi chú tài xế</label>'
+          +'<div style="padding:8px 12px;background:var(--surface2);border-radius:8px;font-size:.78rem;color:var(--text2)">'+bc.ghi_chu+'</div></div>';
+      }
+      if(bc.loai === 'do_dau'){
+        fieldsHtml += '<div style="font-size:.7rem;color:#16a34a;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-top:8px">'
+          +'💡 <strong>Khi duyệt</strong>: phiếu chi nhiên liệu sẽ tự động được tạo từ số tiền trên.</div>';
+      }
+      detailHtml = '<div style="padding:14px;background:#f8fafc;border-top:1px solid var(--border)">'
+        + anhHtml + fieldsHtml
+        +'<div style="display:flex;gap:8px;margin-top:14px">'
+        +'<button class="btn btn-accent btn-sm" style="flex:1" onclick="approveBaoCao(\''+bc.id+'\')">✅ Duyệt</button>'
+        +'<button class="btn btn-ghost btn-sm" onclick="skipBaoCao(\''+bc.id+'\')">⏭️ Bỏ qua</button>'
+        +'<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5" onclick="rejectBaoCao(\''+bc.id+'\')">🗑️ Từ chối</button>'
+        +'</div></div>';
+    }
+
+    return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">'
+      +'<div onclick="togglePendingExpand(\''+bc.id+'\')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;'+(isOpen?'background:#f8fafc':'')+'">'
+      +'<div style="padding:4px 9px;border-radius:6px;font-size:.7rem;font-weight:700;background:'+bg+';color:'+clr+';white-space:nowrap">'+lbl+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:.8rem;font-weight:600">'+txName+' · <span style="color:var(--text3)">'+bienXe+'</span></div>'
+      +'<div style="font-size:.7rem;color:var(--text3)">'+hdSo+' · '+infoStr+'</div>'
+      +'</div>'
+      +'<div style="text-align:right;flex-shrink:0"><div style="font-size:.68rem;color:var(--text3)">'+dtStr+'</div>'
+      +'<div style="font-size:.72rem;color:var(--accent);margin-top:2px">'+(isOpen?'▲ Thu gọn':'▼ Xem & Duyệt')+'</div>'
+      +'</div></div>'
+      + detailHtml
+      +'</div>';
+  }).join('');
+}
+
+// Toggle expand một row trong modal
+function togglePendingExpand(id){
+  PENDING_EXPAND = (PENDING_EXPAND === id) ? null : id;
+  renderPendingBCList();
+}
+
+// ── Duyệt báo cáo ────────────────────────────────────────────────────────────
+async function approveBaoCao(bcId){
+  var bc = PENDING_BC.find(function(x){ return x.id === bcId; });
+  if(!bc){ toast('Không tìm thấy báo cáo','error'); return; }
+
+  // Đọc giá trị đã chỉnh sửa từ form
+  var patch = { trang_thai: 'da_duyet' };
+  if(bc.loai === 'km_dau' || bc.loai === 'km_cuoi'){
+    var kmEl = document.getElementById('pbc-km-'+bcId);
+    if(kmEl){ var kmV = readMoney('pbc-km-'+bcId); if(kmV) patch.so_km = kmV; }
+  } else if(bc.loai === 'do_dau'){
+    var litEl  = document.getElementById('pbc-lit-'+bcId);
+    var tienEl = document.getElementById('pbc-tien-'+bcId);
+    if(litEl){
+      var litV = readLit(litEl.value);
+      if(litV != null) patch.so_lit = litV;
+    }
+    if(tienEl){
+      var tienV = parseInt((tienEl.value||'').replace(/\D/g,''));
+      if(tienV) patch.tong_tien = tienV;
+    }
+  }
+
+  try {
+    // 1. Cập nhật trang_thai + số liệu đã sửa
+    await sbPatch('bao_cao', bcId, patch);
+
+    // 2. Nếu là báo cáo đổ dầu có số tiền → tự tạo phiếu chi
+    var tienFinal = patch.tong_tien != null ? patch.tong_tien : bc.tong_tien;
+    var litFinal  = patch.so_lit    != null ? patch.so_lit    : bc.so_lit;
+    if(bc.loai === 'do_dau' && tienFinal){
+      var dt = bc.created_at ? new Date(bc.created_at) : new Date();
+      var dateStr = dt.getFullYear()+'-'+(dt.getMonth()+1).toString().padStart(2,'0')+'-'+dt.getDate().toString().padStart(2,'0');
+      var timeStr = dt.getHours().toString().padStart(2,'0')+':'+dt.getMinutes().toString().padStart(2,'0');
+      // Tìm hd_id từ hd_so
+      var hdId = null;
+      if(bc.hd_so){
+        var hdRec = DB.hopDong.find(function(h){ return h.so === bc.hd_so; });
+        if(hdRec) hdId = hdRec.id;
+      }
+      var chiPayload = {
+        loai_gd:   'chi',
+        danh_muc:  'Nhiên liệu',
+        ngay_gd:   dateStr,
+        gio_gd:    timeStr,
+        so_tien:   tienFinal,
+        hd_so:     bc.hd_so     || null,
+        hd_id:     hdId         || null,
+        bien_so_xe: bc.bien_xe  || null,
+        tai_xe:    bc.tai_xe_ten || null,
+        hinh_thuc: 'Tiền mặt',
+        doi_tac:   'Cây xăng',
+        mo_ta:     'Nhiên liệu' + (litFinal ? ' '+litFinal+'L' : '') + (bc.hd_so ? ' — '+bc.hd_so : '')
+      };
+      var tcRes = await sbPost('thu_chi', chiPayload);
+      // Thêm vào DB local
+      if(tcRes && tcRes[0]){
+        DB.thuChi.push(mapTC(Object.assign({}, chiPayload, {
+          id:        tcRes[0].id,
+          loai_gd:   'chi',
+          danh_muc:  chiPayload.danh_muc,
+          ngay_gd:   dateStr,
+          gio_gd:    timeStr,
+          so_tien:   tienFinal,
+          hinh_thuc: 'Tiền mặt',
+        })));
+      }
+      toast('✅ Đã duyệt + tạo phiếu chi nhiên liệu '+fmtM(tienFinal), 'success');
+    } else {
+      toast('✅ Đã duyệt báo cáo', 'success');
+    }
+
+    // 3. Cập nhật cache & UI
+    PENDING_BC = PENDING_BC.filter(function(x){ return x.id !== bcId; });
+    PENDING_EXPAND = null;
+    updatePendingBadge();
+    renderNotifPendingSection();
+    renderPendingBCList();
+
+  } catch(e){ toast('❌ '+e.message, 'error'); }
+}
+
+// Bỏ qua (mark da_duyet, không tạo phiếu chi)
+async function skipBaoCao(bcId){
+  try {
+    await sbPatch('bao_cao', bcId, { trang_thai: 'da_duyet' });
+    PENDING_BC = PENDING_BC.filter(function(x){ return x.id !== bcId; });
+    PENDING_EXPAND = null;
+    updatePendingBadge();
+    renderNotifPendingSection();
+    renderPendingBCList();
+    toast('⏭️ Đã bỏ qua báo cáo', 'info');
+  } catch(e){ toast('❌ '+e.message, 'error'); }
+}
+
+// Từ chối (mark tu_choi)
+async function rejectBaoCao(bcId){
+  if(!confirm('Từ chối báo cáo này? Báo cáo sẽ bị đánh dấu không hợp lệ.')) return;
+  try {
+    await sbPatch('bao_cao', bcId, { trang_thai: 'tu_choi' });
+    PENDING_BC = PENDING_BC.filter(function(x){ return x.id !== bcId; });
+    PENDING_EXPAND = null;
+    updatePendingBadge();
+    renderNotifPendingSection();
+    renderPendingBCList();
+    toast('🗑️ Đã từ chối báo cáo', 'info');
+  } catch(e){ toast('❌ '+e.message, 'error'); }
+}
 
 // ═══════════════════════════════════════
 // [REMOVED: Portal Tài xế — xem driver.html]
@@ -3619,7 +3892,9 @@ function renderFuelSummary(rows, xe){
 async function fetchBaoCao(field, value, extraFilter){
   if(!SB_URL||!SB_KEY) return [];
   try{
+    // Chỉ lấy BC đã duyệt: loại trừ 'cho_duyet', giữ lại NULL (dữ liệu cũ) và da_duyet
     var url=SB_URL+'/rest/v1/bao_cao?'+field+'=eq.'+encodeURIComponent(value)
+      +'&or=(trang_thai.is.null,trang_thai.eq.da_duyet,trang_thai.eq.tu_choi)'
       +(extraFilter?'&'+extraFilter:'')
       +'&order=created_at.desc&limit=50'
       +'&select=id,loai,tai_xe_ten,tai_xe_sdt,bien_xe,hd_so,ghi_chu,anh_urls,gps_lat,gps_lng,so_km,so_lit,tong_tien,da_do_day_binh,created_at';
