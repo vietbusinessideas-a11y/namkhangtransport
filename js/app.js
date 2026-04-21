@@ -198,7 +198,11 @@ function mapGiaDau(r){return{id:r.id,gia:Number(r.gia),ngay:r.ngay_ap_dung||'',g
 function getCurrentGiaDau(){
   if(!DB.giaDau||!DB.giaDau.length) return null;
   var today=new Date().toISOString().slice(0,10);
-  var valid=DB.giaDau.filter(function(g){return g.ngay&&g.ngay<=today;}).sort(function(a,b){return b.ngay.localeCompare(a.ngay);});
+  var valid=DB.giaDau.filter(function(g){return g.ngay&&g.ngay<=today;}).sort(function(a,b){
+    var d=b.ngay.localeCompare(a.ngay);
+    if(d!==0) return d;
+    return b.created_at.localeCompare(a.created_at); // cùng ngày → lấy cái tạo sau
+  });
   return valid.length?valid[0]:null;
 }
 
@@ -408,7 +412,7 @@ function loadDB(){
       checkOverdueHDAdmin();  // Kiểm tra HĐ quá hạn chưa báo cáo hoàn thành
       checkPendingBaoCao();   // Kiểm tra báo cáo tài xế chờ duyệt
       // Load giá dầu toàn hệ thống (tách riêng để không crash nếu bảng chưa tạo)
-      sbFetch('gia_dau','order=ngay_ap_dung.desc').then(function(gd){
+      sbFetch('gia_dau','order=ngay_ap_dung.desc,created_at.desc').then(function(gd){
         if(gd&&gd.length){ DB.giaDau=gd.map(mapGiaDau); updateGiaDauBtn(); }
       }).catch(function(){/* bảng gia_dau chưa tạo — ok */});
     });
@@ -1469,8 +1473,14 @@ function saveGiaDau(){
     .then(function(res){
       var newId=(res&&res[0]&&res[0].id)?res[0].id:'local-'+Date.now();
       var rec=mapGiaDau({id:newId,gia:giaVal,ngay_ap_dung:ngayVal,ghi_chu:ghiChu||''});
+      // Thêm created_at hiện tại để sort đúng khi cùng ngày
+      if(!rec.created_at) rec.created_at = new Date().toISOString();
       DB.giaDau.push(rec);
-      DB.giaDau.sort(function(a,b){return b.ngay.localeCompare(a.ngay);});
+      DB.giaDau.sort(function(a,b){
+        var d=b.ngay.localeCompare(a.ngay);
+        if(d!==0) return d;
+        return b.created_at.localeCompare(a.created_at);
+      });
       toast('✅ Đã lưu giá dầu '+fmt(giaVal)+' đ/lít từ '+fmtD(ngayVal),'success');
       updateGiaDauBtn();
       closeModal();
@@ -2170,60 +2180,199 @@ function calcAllocatedCost(h){
 var bcTab='tongquan';
 var bcPeriod='thang';
 function switchBCTab(t,el){bcTab=t;document.querySelectorAll('#page-baocao .tab').forEach(function(b){b.classList.remove('active');});el.classList.add('active');['tongquan','hopdong','xe','taixe'].forEach(function(p){var panel=document.getElementById('bc-panel-'+p);if(panel)panel.style.display=t===p?'':'none';});if(t==='hopdong')renderBCHopDong();if(t==='xe')renderBCXe();if(t==='taixe')renderBCTaiXe();}
+
+// ═══════════════════════════════════════
+// CHI PHÍ NHIÊN LIỆU THEO TIÊU HAO (bao_cao-based)
+// ═══════════════════════════════════════
+
+// Cache: hdId → { tienNL, litNL, kmChay, method } | 'loading' | null
+var BC_FUEL_CACHE = {};
+
+// Tính chi phí nhiên liệu từ bao_cao rows của một HĐ
+// method: 'actual' (đổ dầu thực), 'estimate' (km×DM×giá), 'partial' (thiếu DM/giá), null
+function computeFuelCostFromBC(bcRows, xeObj){
+  var doDauRows = bcRows.filter(function(r){ return r.loai==='do_dau'; });
+  var kmDauRows = bcRows.filter(function(r){ return r.loai==='km_dau' && r.so_km; });
+  var kmCuoiRows= bcRows.filter(function(r){ return r.loai==='km_cuoi' && r.so_km; });
+
+  if(doDauRows.length){
+    // ── Phương pháp 1: Thực tế từ báo cáo đổ dầu ──
+    var totalLit  = doDauRows.reduce(function(s,r){ return s+(Number(r.so_lit)||0); }, 0);
+    var totalTien = doDauRows.reduce(function(s,r){ return s+(Number(r.tong_tien)||0); }, 0);
+    if(!totalTien && totalLit){
+      var gia = (xeObj && xeObj.giaDauTK) || (getCurrentGiaDau() ? getCurrentGiaDau().gia : null);
+      if(gia) totalTien = Math.round(totalLit * gia);
+    }
+    return { tienNL: totalTien||null, litNL: totalLit||null, kmChay: null, method: 'actual' };
+  }
+
+  if(kmDauRows.length && kmCuoiRows.length){
+    // ── Phương pháp 2: Ước tính từ km đầu/cuối × định mức × giá dầu ──
+    var kmDau  = Math.min.apply(null, kmDauRows.map(function(r){ return Number(r.so_km); }));
+    var kmCuoi = Math.max.apply(null, kmCuoiRows.map(function(r){ return Number(r.so_km); }));
+    var kmChay = kmCuoi - kmDau;
+    var dinhMuc= xeObj ? xeObj.dinhMuc : null;
+    var giaDau = (xeObj && xeObj.giaDauTK) || (getCurrentGiaDau() ? getCurrentGiaDau().gia : null);
+    if(kmChay > 0 && dinhMuc && giaDau){
+      var litEst  = Math.round(kmChay * dinhMuc / 100 * 10) / 10;
+      var tienEst = Math.round(litEst * giaDau);
+      return { tienNL: tienEst, litNL: litEst, kmChay: kmChay, method: 'estimate' };
+    }
+    // Có km data nhưng thiếu định mức hoặc giá
+    return { tienNL: null, litNL: null, kmChay: kmChay > 0 ? kmChay : null, method: 'partial' };
+  }
+
+  return { tienNL: null, litNL: null, kmChay: null, method: null };
+}
+
+// Batch fetch bao_cao (do_dau + km_dau + km_cuoi) cho tất cả HĐ, lưu cache, re-render
+async function loadBCFuelBatch(hdList){
+  if(!SB_URL || !SB_KEY || !hdList.length) return;
+  var hdSoList = hdList.map(function(h){ return h.so; }).filter(Boolean);
+  if(!hdSoList.length) return;
+
+  // Đánh dấu loading
+  hdList.forEach(function(h){ if(BC_FUEL_CACHE[h.id]=== undefined) BC_FUEL_CACHE[h.id] = 'loading'; });
+
+  var H = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
+  // PostgREST in(): hd_so=in.(val1,val2,...)
+  var inParam = hdSoList.map(encodeURIComponent).join(',');
+
+  try{
+    var r = await fetch(
+      SB_URL+'/rest/v1/bao_cao?hd_so=in.('+inParam+')'
+      +'&loai=in.(do_dau,km_dau,km_cuoi)'
+      +'&select=hd_so,loai,so_km,so_lit,tong_tien,created_at'
+      +'&order=created_at.asc',
+      {headers: H}
+    );
+    if(!r.ok) throw new Error(r.status);
+    var bcRows = await r.json();
+
+    // Group by hd_so
+    var byHdSo = {};
+    bcRows.forEach(function(bc){
+      if(!byHdSo[bc.hd_so]) byHdSo[bc.hd_so] = [];
+      byHdSo[bc.hd_so].push(bc);
+    });
+
+    // Compute fuel per contract
+    hdList.forEach(function(h){
+      var rows   = byHdSo[h.so] || [];
+      var xeObj  = h.xe ? DB.xe.find(function(v){ return v.bien===h.xe; }) : null;
+      BC_FUEL_CACHE[h.id] = computeFuelCostFromBC(rows, xeObj);
+    });
+  } catch(e){
+    console.warn('loadBCFuelBatch:', e.message);
+    // Đánh dấu lỗi để không retry vô tận
+    hdList.forEach(function(h){ if(BC_FUEL_CACHE[h.id]==='loading') BC_FUEL_CACHE[h.id]=null; });
+  }
+
+  // Re-render nếu vẫn đang ở tab hopdong
+  if(currentPage==='baocao' && bcTab==='hopdong') renderBCHopDong();
+}
+
+// Render cell Chi NL cho 1 HĐ
+function renderChiNLCell(h){
+  // Nếu đã có phiếu chi Nhiên liệu trong thu_chi → không double-count
+  var hasFuelTC = DB.thuChi.some(function(t){
+    return t.type==='chi' && t.hd_id===h.id && t.loai==='Nhiên liệu';
+  });
+  if(hasFuelTC){
+    return '<span style="color:var(--text3);font-size:.7rem">Đã trong<br>phiếu chi</span>';
+  }
+
+  var fuel = BC_FUEL_CACHE[h.id];
+  if(fuel === undefined || fuel === 'loading'){
+    return '<span style="color:var(--text3)">⏳</span>';
+  }
+  if(!fuel || fuel.tienNL == null){
+    if(fuel && fuel.method==='partial'){
+      return '<span style="color:var(--orange);font-size:.68rem" title="Có dữ liệu km nhưng thiếu định mức hoặc giá dầu">⚠️ Thiếu DM/giá</span>';
+    }
+    return '<span style="color:var(--text3)">—</span>';
+  }
+  var tag = fuel.method==='actual'
+    ? '<div style="font-size:.63rem;color:var(--green)">💧 '+(fuel.litNL?fuel.litNL+'L · ':'')+'thực tế</div>'
+    : '<div style="font-size:.63rem;color:var(--accent)">📊 '+(fuel.kmChay?fmt(fuel.kmChay)+'km · ':'')+'ước tính</div>';
+  return '<span class="amt-neg">-'+fmtM(fuel.tienNL)+'</span>'+tag;
+}
+
+// Lấy giá trị số chiNL (cho tính toán)
+function getChiNLValue(h){
+  var hasFuelTC = DB.thuChi.some(function(t){
+    return t.type==='chi' && t.hd_id===h.id && t.loai==='Nhiên liệu';
+  });
+  if(hasFuelTC) return 0; // đã tính trong chiTrucTiep
+  var fuel = BC_FUEL_CACHE[h.id];
+  return (fuel && fuel !== 'loading' && fuel.tienNL) ? fuel.tienNL : 0;
+}
+
 function renderBCHopDong(){
   var q=(document.getElementById('bc-hd-search').value||'').toLowerCase();
   var tt=document.getElementById('bc-hd-tt').value;
   var sort=document.getElementById('bc-hd-sort').value;
-  // Lọc theo kỳ đang xem (Tháng / Quý / Năm)
   var d=buildBC()[bcPeriod];
   var ymList=d.ymList;
   function _inP(h){return ymList.indexOf((h.ngay_di||h.ngay||'').slice(0,7))>=0;}
-  // Chỉ hiển thị HĐ đã HOÀN THÀNH trong kỳ (hoan_thanh hoặc cho_thanh_toan)
-  var rows=DB.hopDong.filter(function(h){return _isCompleted(h)&&_inP(h);}).map(function(h){
-    // Doanh thu = giá trị HĐ (HĐ đã được lọc hoàn thành rồi)
-    var doanhThu=h.giatri;
-    // Chi trực tiếp: phiếu chi có liên kết HĐ này
-    var chiTrucTiep=DB.thuChi.filter(function(t){return t.type==='chi'&&t.hd_id===h.id;}).reduce(function(s,t){return s+t.sotien;},0);
-    // Chi phí phân bổ từ chi phí xe/tài xế cố định
-    var alloc=calcAllocatedCost(h);
-    var chiPhanBo=alloc.total;
-    var tongChi=chiTrucTiep+chiPhanBo;
-    // Lãi gộp (chỉ trừ chi trực tiếp)
-    var laiGop=doanhThu-chiTrucTiep;
-    var tsGop=doanhThu>0?Math.round(laiGop/doanhThu*100):0;
-    // Lợi nhuận thực (trừ cả phân bổ)
-    var lnThuc=doanhThu-tongChi;
-    var tsThuc=doanhThu>0?Math.round(lnThuc/doanhThu*100):0;
-    return Object.assign({},h,{chiTrucTiep:chiTrucTiep,chiPhanBo:chiPhanBo,chiXe:alloc.xeCost,chiLuong:alloc.luongCost,tongChi:tongChi,doanhThu:doanhThu,laiGop:laiGop,tsGop:tsGop,ln:lnThuc,ts:tsThuc,days:alloc.days||1});
+
+  var allCompleted = DB.hopDong.filter(function(h){return _isCompleted(h)&&_inP(h);});
+
+  // Trigger async fuel batch load cho những HĐ chưa có trong cache
+  var needLoad = allCompleted.filter(function(h){ return BC_FUEL_CACHE[h.id]===undefined; });
+  if(needLoad.length) loadBCFuelBatch(needLoad);
+
+  var rows = allCompleted.map(function(h){
+    var doanhThu    = h.giatri;
+    var chiTrucTiep = DB.thuChi.filter(function(t){return t.type==='chi'&&t.hd_id===h.id;}).reduce(function(s,t){return s+t.sotien;},0);
+    var chiNL       = getChiNLValue(h);  // 0 nếu đã trong phiếu chi hoặc chưa có BC
+    var alloc       = calcAllocatedCost(h);
+    var chiPhanBo   = alloc.total;
+    var tongChi     = chiTrucTiep + chiNL + chiPhanBo;
+    // Lãi gộp = Doanh thu - Chi biến đổi trực tiếp (phiếu chi + nhiên liệu)
+    var laiGop  = doanhThu - chiTrucTiep - chiNL;
+    var tsGop   = doanhThu>0 ? Math.round(laiGop/doanhThu*100) : 0;
+    // LN thực = Lãi gộp - Chi phí cố định phân bổ
+    var lnThuc  = doanhThu - tongChi;
+    var tsThuc  = doanhThu>0 ? Math.round(lnThuc/doanhThu*100) : 0;
+    return Object.assign({},h,{chiTrucTiep:chiTrucTiep,chiNL:chiNL,chiPhanBo:chiPhanBo,chiXe:alloc.xeCost,chiLuong:alloc.luongCost,tongChi:tongChi,doanhThu:doanhThu,laiGop:laiGop,tsGop:tsGop,ln:lnThuc,ts:tsThuc,days:alloc.days||1});
   }).filter(function(h){return(!q||[h.so,h.kh,h.tuyen].join(' ').toLowerCase().includes(q))&&(!tt||h.tt===tt);})
     .sort(function(a,b){if(sort==='ln_desc')return b.ln-a.ln;if(sort==='ln_asc')return a.ln-b.ln;if(sort==='gt_desc')return b.giatri-a.giatri;return b.ngay.localeCompare(a.ngay);});
 
-  var tongThu=rows.reduce(function(s,h){return s+h.doanhThu;},0);
-  var tongChiTT=rows.reduce(function(s,h){return s+h.chiTrucTiep;},0);
-  var tongChiPB=rows.reduce(function(s,h){return s+h.chiPhanBo;},0);
-  var tongLNThuc=rows.reduce(function(s,h){return s+h.ln;},0);
-  var tongConLai=rows.reduce(function(s,h){return s+(h.giatri-h.dathu);},0);
+  var tongThu    = rows.reduce(function(s,h){return s+h.doanhThu;},0);
+  var tongChiTT  = rows.reduce(function(s,h){return s+h.chiTrucTiep;},0);
+  var tongChiNL  = rows.reduce(function(s,h){return s+h.chiNL;},0);
+  var tongChiPB  = rows.reduce(function(s,h){return s+h.chiPhanBo;},0);
+  var tongLNThuc = rows.reduce(function(s,h){return s+h.ln;},0);
+
+  // Đếm HĐ có/thiếu dữ liệu nhiên liệu
+  var hdCoNL     = rows.filter(function(h){ var f=BC_FUEL_CACHE[h.id]; return f&&f!=='loading'&&(f.tienNL||DB.thuChi.some(function(t){return t.type==='chi'&&t.hd_id===h.id&&t.loai==='Nhiên liệu';})); }).length;
+  var hdLoading  = rows.filter(function(h){ return BC_FUEL_CACHE[h.id]==='loading'||BC_FUEL_CACHE[h.id]===undefined; }).length;
 
   document.getElementById('bc-hd-kpi').innerHTML=[
-    {cls:'c-green',ic:'ic-green',ico:'💰',lbl:'Tổng doanh thu',val:fmtM(tongThu),sub:rows.length+' HĐ hoàn thành · '+d.lbl},
-    {cls:'c-red',ic:'ic-red',ico:'💸',lbl:'Chi trực tiếp',val:fmtM(tongChiTT),sub:'Chi có liên kết HĐ'},
-    {cls:'c-purple',ic:'ic-purple',ico:'🔧',lbl:'Chi phí phân bổ',val:fmtM(tongChiPB),sub:'Xe + lương tài xế'},
-    {cls:'c-blue',ic:'ic-blue',ico:'📈',lbl:'Lợi nhuận thực',val:fmtM(tongLNThuc),sub:tongThu>0?((tongLNThuc/tongThu*100).toFixed(1)+'% tỷ suất'):''},
-  ].map(function(c,i){var color=c.cls==='c-green'?'green':c.cls==='c-red'?'red':c.cls==='c-blue'?'accent':c.cls==='c-purple'?'purple':'orange';return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.lbl+'</div><div class="kpi-icon '+c.ic+'">'+c.ico+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';}).join('');
+    {cls:'c-green',  ico:'💰', lbl:'Tổng doanh thu',   val:fmtM(tongThu),    sub:rows.length+' HĐ hoàn thành · '+d.lbl},
+    {cls:'c-orange', ico:'🛢️', lbl:'Chi nhiên liệu',   val:fmtM(tongChiNL),  sub:(hdLoading?'⏳ Đang tải '+hdLoading+' HĐ...':hdCoNL+'/'+rows.length+' HĐ có dữ liệu BC')},
+    {cls:'c-purple', ico:'🔧', lbl:'Chi phí phân bổ',   val:fmtM(tongChiPB),  sub:'Xe + lương tài xế'},
+    {cls:'c-blue',   ico:'📈', lbl:'Lợi nhuận thực',   val:fmtM(tongLNThuc), sub:tongThu>0?((tongLNThuc/tongThu*100).toFixed(1)+'% tỷ suất'):''},
+  ].map(function(c,i){
+    var colorMap={'c-green':'green','c-red':'red','c-orange':'orange','c-blue':'accent','c-purple':'purple'};
+    var color=colorMap[c.cls]||'accent';
+    return'<div class="kpi-card '+c.cls+'" style="animation-delay:'+((i+1)*0.05)+'s"><div class="kpi-header"><div class="kpi-label">'+c.ico+' '+c.lbl+'</div></div><div class="kpi-value" style="color:var(--'+color+')">'+c.val+'</div><div class="kpi-footer"><span class="kpi-sub">'+c.sub+'</span></div></div>';
+  }).join('');
 
   document.getElementById('bc-hd-count').textContent=rows.length+' hợp đồng';
   document.getElementById('bc-hd-summary').innerHTML=
     '<span style="color:var(--green)">↑ '+fmtM(tongThu)+'</span>'
     +'<span style="color:var(--border)">|</span>'
-    +'<span style="color:var(--red)">↓ '+fmtM(tongChiTT+tongChiPB)+'</span>'
+    +'<span style="color:var(--red)">↓ '+fmtM(tongChiTT+tongChiNL+tongChiPB)+'</span>'
     +'<span style="color:var(--border)">|</span>'
     +'<span style="color:var(--accent);font-weight:700">= '+fmtM(tongLNThuc)+'</span>';
 
   document.getElementById('bc-hd-body').innerHTML=rows.length?rows.map(function(h){
-    var tsColor=h.ts>=30?'var(--green)':h.ts>=15?'var(--accent)':h.ts>=0?'var(--orange)':'var(--red)';
-    var gopColor=h.tsGop>=40?'var(--green)':h.tsGop>=20?'var(--accent)':'var(--orange)';
-    var barW=Math.min(100,Math.max(0,h.ts));
-    var phanBoTip=h.chiPhanBo>0?'Xe: '+fmtM(h.chiXe)+' · Lương: '+fmtM(h.chiLuong):'—';
+    var tsColor  = h.ts>=30?'var(--green)':h.ts>=15?'var(--accent)':h.ts>=0?'var(--orange)':'var(--red)';
+    var gopColor = h.tsGop>=40?'var(--green)':h.tsGop>=20?'var(--accent)':'var(--orange)';
+    var barW     = Math.min(100,Math.max(0,h.ts));
+    var phanBoTip= h.chiPhanBo>0?'Xe: '+fmtM(h.chiXe)+' · Lương: '+fmtM(h.chiLuong):'—';
     return'<tr onclick="openHDDetail(\''+h.id+'\')" style="cursor:pointer">'
       +'<td><span class="mono" style="font-weight:600">'+h.so+'</span><div style="font-size:.65rem;color:var(--text3)">'+h.days+'N</div></td>'
       +'<td style="font-weight:500">'+h.kh+'</td>'
@@ -2231,12 +2380,13 @@ function renderBCHopDong(){
       +'<td><span class="mono">'+fmtD(h.ngay)+'</span></td>'
       +'<td><span class="amt-pos">+'+fmt(h.doanhThu)+'</span>'+(h.dathu<h.giatri?'<div style="font-size:.67rem;color:var(--orange)">Đã thu: '+fmtM(h.dathu)+'</div>':'<div style="font-size:.67rem;color:var(--green)">Đã thu đủ</div>')+'</td>'
       +'<td>'+(h.chiTrucTiep>0?'<span class="amt-neg">-'+fmtM(h.chiTrucTiep)+'</span>':'<span style="color:var(--text3)">—</span>')+'</td>'
+      +'<td>'+renderChiNLCell(h)+'</td>'
       +'<td title="'+phanBoTip+'">'+(h.chiPhanBo>0?'<span style="color:var(--purple)">-'+fmtM(h.chiPhanBo)+'</span><div style="font-size:.64rem;color:var(--text3)">'+phanBoTip+'</div>':'<span style="color:var(--text3)">—</span>')+'</td>'
       +'<td><span style="font-weight:700;color:'+gopColor+'">'+fmt(h.laiGop)+'</span><div style="font-size:.64rem;color:var(--text3)">'+h.tsGop+'%</div></td>'
       +'<td><span style="font-weight:700;font-family:\'DM Mono\',monospace;color:'+tsColor+'">'+(h.ln>=0?'+':'')+fmt(h.ln)+'</span><div style="display:flex;align-items:center;gap:4px;margin-top:2px"><div style="width:40px;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+tsColor+'"></div></div><span style="font-size:.64rem;color:'+tsColor+'">'+h.ts+'%</span></div></td>'
       +'<td>'+(TTMAP[h.tt]||'')+'</td>'
       +'</tr>';
-  }).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text3)">Không có hợp đồng nào</td></tr>';
+  }).join(''):'<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--text3)">Không có hợp đồng nào</td></tr>';
 }
 function renderBCXe(){
   var q=(document.getElementById('bc-xe-search').value||'').toLowerCase();
@@ -2528,10 +2678,10 @@ function _chiCats(ymList){
 }
 function setBCPeriod(p,el){
   bcPeriod=p;
+  BC_FUEL_CACHE = {}; // Reset cache khi đổi kỳ → fetch lại cho kỳ mới
   document.querySelectorAll('#page-baocao .ptab').forEach(function(t){t.classList.remove('active');});
   el.classList.add('active');
-  renderBC(); // Tổng quan luôn re-render
-  // Re-render tab đang active nếu không phải Tổng quan
+  renderBC();
   if(bcTab==='hopdong')renderBCHopDong();
   else if(bcTab==='xe')renderBCXe();
   else if(bcTab==='taixe')renderBCTaiXe();
