@@ -126,9 +126,10 @@
       <div class="card"><div class="card-header"><div><div class="card-title">Danh sách Khách hàng</div><div class="card-sub" id="kh-count">0 khách hàng</div></div></div><div class="table-wrap"><table class="dt" style="min-width:560px"><thead><tr><th>Mã KH</th><th>Khách hàng</th><th>Loại</th><th>Điện thoại</th><th>Tổng HĐ</th><th>Doanh số</th><th></th></tr></thead><tbody id="kh-body"></tbody></table></div><div id="kh-pager" class="pager" style="padding:8px 16px"></div></div>
     </div>
     <div class="page" id="page-xe">
-      <div class="tab-bar" style="margin-bottom:18px">
+      <div class="tab-bar" style="margin-bottom:18px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
         <button class="tab active" onclick="switchXeTab('xe',this)">🚌 Xe <span id="count-xe" style="background:rgba(0,0,0,.08);border-radius:20px;padding:1px 7px;font-size:.72rem;margin-left:2px">0</span></button>
         <button class="tab" onclick="switchXeTab('taixe',this)">🧑‍✈️ Tài xế <span id="count-tx" style="background:rgba(0,0,0,.08);border-radius:20px;padding:1px 7px;font-size:.72rem;margin-left:2px">0</span></button>
+        <button id="gia-dau-btn" onclick="openGiaDauModal()" style="margin-left:auto;padding:6px 14px;border-radius:20px;border:1.5px solid #f59e0b;background:#fffbeb;color:#92400e;font-size:.76rem;font-weight:700;cursor:pointer;white-space:nowrap">⛽ Giá dầu</button>
       </div>
       <div id="xe-panel"><div class="xe-grid" id="xe-grid"></div></div>
       <div id="taixe-panel" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Danh sách Tài xế</div><div class="card-sub">Hiệu suất tháng 4/2026</div></div></div><div class="table-wrap"><table class="dt" style="min-width:560px"><thead><tr><th>Tài xế</th><th>CMND</th><th>Bằng lái</th><th>Số chuyến T4</th><th>Doanh thu T4</th><th>Lương CB</th><th></th></tr></thead><tbody id="taixe-body"></tbody></table></div></div></div>
@@ -343,7 +344,21 @@ ALTER TABLE bao_cao ADD COLUMN IF NOT EXISTS trang_thai text DEFAULT 'da_duyet';
 
 -- Index để query nhanh theo biển số
 CREATE INDEX IF NOT EXISTS idx_bd_bien_so ON bao_duong_lich_su(bien_so_xe);
-CREATE INDEX IF NOT EXISTS idx_bd_loai    ON bao_duong_lich_su(loai);</pre>
+CREATE INDEX IF NOT EXISTS idx_bd_loai    ON bao_duong_lich_su(loai);
+
+-- ════════════════════════════════════════
+-- Bảng lịch sử giá dầu toàn hệ thống
+-- ════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS gia_dau (
+  id            uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  gia           integer NOT NULL,      -- giá đ/lít (VD: 22000)
+  ngay_ap_dung  date NOT NULL,         -- ngày bắt đầu áp dụng
+  ghi_chu       text,                  -- VD: "Xăng RON 95-III TP.HCM"
+  created_at    timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gia_dau_ngay ON gia_dau(ngay_ap_dung DESC);
+-- NOTE: xe.gia_dau_tk vẫn được dùng như giá override riêng từng xe.
+--       Nếu không set, hệ thống tự lấy giá mới nhất từ bảng gia_dau.</pre>
           <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="navigator.clipboard.writeText(document.getElementById('sql-guide').textContent).then(function(){toast('✅ Đã copy SQL','success');})">📋 Copy SQL</button>
         </div>
       </div>
