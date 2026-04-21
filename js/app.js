@@ -2535,8 +2535,9 @@ var PENDING_EXPAND = null;  // id đang mở rộng trong modal
 // Fetch danh sách báo cáo chờ duyệt từ Supabase
 function checkPendingBaoCao(){
   if(!isAdmin() || !SB_URL || !SB_KEY) return;
-  sbGet('bao_cao',
+  sbFetch('bao_cao',
     'trang_thai=eq.cho_duyet&order=created_at.desc&limit=50'
+    +'&select=id,loai,tai_xe_ten,tai_xe_sdt,bien_xe,hd_so,ghi_chu,anh_urls,so_km,so_lit,tong_tien,da_do_day_binh,created_at'
   ).then(function(rows){
     PENDING_BC = rows || [];
     updatePendingBadge();
