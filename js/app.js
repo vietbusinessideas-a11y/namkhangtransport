@@ -465,7 +465,7 @@ function navTo(page){
 }
 function renderCurrentPage(){
   populateHDMonthFilter(); // Cập nhật dropdown tháng mỗi khi data thay đổi
-  var fns={dashboard:renderDashboard,hopdong:renderHD,khachhang:renderKH,xe:renderXe,thuchi:renderTCAll,baocao:renderBC,caidat:loadCaiDat};
+  var fns={dashboard:renderDashboard,hopdong:renderHD,khachhang:renderKH,xe:renderXe,thuchi:renderTCAll,baocao:renderBC,'duyet-bc':renderDuyetBC,caidat:loadCaiDat};
   if(fns[currentPage])fns[currentPage]();
 }
 // Điều hướng đến trang HĐ và set filter trạng thái
@@ -2534,19 +2534,25 @@ function checkPendingBaoCao(){
     PENDING_BC = rows || [];
     updatePendingBadge();
     renderNotifPendingSection();
-    // Nếu modal đang mở thì reload list
-    var modal = document.getElementById('pending-bc-modal');
-    if(modal && modal.style.display !== 'none') renderPendingBCList();
+    renderDuyetBCContent();
   }).catch(function(e){ console.warn('checkPendingBaoCao:', e.message); });
 }
 
-// Cập nhật badge nút "📋 Chờ duyệt" trên topbar
+// Cập nhật badge trên topbar + sidebar nav
 function updatePendingBadge(){
   var cnt = PENDING_BC.length;
+  // Nút topbar
   var btn = document.getElementById('pending-bc-btn');
   var badge = document.getElementById('pending-bc-badge');
   if(btn){ btn.style.display = cnt ? 'inline-flex' : 'none'; btn.style.alignItems = 'center'; }
   if(badge) badge.textContent = cnt;
+  // Nav sidebar — chỉ hiện khi admin
+  var navItem = document.getElementById('nav-duyet-bc');
+  var navBadge = document.getElementById('duyetBcBadge');
+  if(navItem) navItem.style.display = isAdmin() ? '' : 'none';
+  if(navBadge){ navBadge.style.display = cnt ? '' : 'none'; navBadge.textContent = cnt; }
+  // Nếu đang ở trang duyet-bc thì reload
+  if(currentPage === 'duyet-bc') renderDuyetBCContent();
 }
 
 // Hiển thị section BC chờ duyệt trong notification panel
@@ -2556,7 +2562,7 @@ function renderNotifPendingSection(){
   var cnt = PENDING_BC.length;
   if(!cnt){ sec.style.display='none'; return; }
   sec.style.display = 'block';
-  sec.innerHTML = '<div onclick="openPendingModal();closeNotifPanel()" style="display:flex;align-items:center;gap:12px;padding:13px 18px;cursor:pointer;background:#fef2f2">'
+  sec.innerHTML = '<div onclick="closeNotifPanel();navTo(\'duyet-bc\')" style="display:flex;align-items:center;gap:12px;padding:13px 18px;cursor:pointer;background:#fef2f2">'
     +'<div style="width:36px;height:36px;border-radius:10px;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">📋</div>'
     +'<div style="flex:1"><div style="font-size:.8rem;font-weight:700;color:#dc2626">'+cnt+' báo cáo chờ duyệt</div>'
     +'<div style="font-size:.72rem;color:#ef4444;margin-top:2px">Bấm để xem và duyệt</div></div>'
@@ -2564,13 +2570,32 @@ function renderNotifPendingSection(){
     +'</div>';
 }
 
-// Mở/đóng modal duyệt
+// Trang Duyệt BC (được gọi khi navTo('duyet-bc'))
+function renderDuyetBC(){
+  // Nếu chưa có data, fetch trước
+  if(!PENDING_BC.length && SB_URL && SB_KEY){
+    var sub = document.getElementById('duyet-bc-sub');
+    if(sub) sub.textContent = 'Đang tải...';
+    checkPendingBaoCao();
+  } else {
+    renderDuyetBCContent();
+  }
+}
+
+// Render nội dung vào trang (và cập nhật modal nếu đang mở)
+function renderDuyetBCContent(){
+  _renderPendingInto('duyet-bc-content', 'duyet-bc-sub');
+  // Cập nhật modal nếu đang mở
+  var modal = document.getElementById('pending-bc-modal');
+  if(modal && modal.style.display !== 'none') _renderPendingInto('pending-bc-list', 'pending-bc-subtitle');
+}
+
+// Mở/đóng modal (vẫn giữ cho notifPanel access)
 function openPendingModal(){
   var el = document.getElementById('pending-bc-modal');
   if(!el) return;
   el.style.display = 'flex';
-  PENDING_EXPAND = null;
-  renderPendingBCList();
+  _renderPendingInto('pending-bc-list', 'pending-bc-subtitle');
 }
 function closePendingModal(){
   var el = document.getElementById('pending-bc-modal');
@@ -2582,15 +2607,17 @@ document.addEventListener('click', function(e){
   if(e.target === modal) closePendingModal();
 });
 
-// Render danh sách BC chờ duyệt vào modal
-function renderPendingBCList(){
-  var sub = document.getElementById('pending-bc-subtitle');
-  var list = document.getElementById('pending-bc-list');
+// ── Hàm render chung (dùng cho cả trang lẫn modal) ──────────────────────────
+function renderPendingBCList(){ _renderPendingInto('pending-bc-list','pending-bc-subtitle'); }
+
+function _renderPendingInto(containerId, subtitleId){
+  var sub  = document.getElementById(subtitleId);
+  var list = document.getElementById(containerId);
   if(!list) return;
   var cnt = PENDING_BC.length;
-  if(sub) sub.textContent = cnt ? cnt + ' báo cáo đang chờ xem xét' : 'Không có báo cáo nào';
+  if(sub) sub.textContent = cnt ? cnt + ' báo cáo đang chờ xem xét' : 'Không có báo cáo nào chờ duyệt';
   if(!cnt){
-    list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:.85rem">✅ Tất cả báo cáo đã được duyệt</div>';
+    list.innerHTML = '<div style="padding:48px;text-align:center;color:var(--text3);font-size:.85rem">✅ Tất cả báo cáo đã được duyệt</div>';
     return;
   }
   var loaiLabel = {km_dau:'🔢 KM Đầu', km_cuoi:'🏁 KM Cuối', do_dau:'⛽ Đổ dầu', hoan_thanh:'✅ Hoàn thành', thay_nhot:'🔧 Thay nhớt', bao_cao_khac:'📄 Báo cáo khác'};
@@ -2675,10 +2702,10 @@ function renderPendingBCList(){
   }).join('');
 }
 
-// Toggle expand một row trong modal
+// Toggle expand một row — re-render cả trang lẫn modal nếu đang mở
 function togglePendingExpand(id){
   PENDING_EXPAND = (PENDING_EXPAND === id) ? null : id;
-  renderPendingBCList();
+  renderDuyetBCContent();
 }
 
 // ── Duyệt báo cáo ────────────────────────────────────────────────────────────
@@ -2758,7 +2785,7 @@ async function approveBaoCao(bcId){
     PENDING_EXPAND = null;
     updatePendingBadge();
     renderNotifPendingSection();
-    renderPendingBCList();
+    renderDuyetBCContent();
 
   } catch(e){ toast('❌ '+e.message, 'error'); }
 }
@@ -2771,7 +2798,7 @@ async function skipBaoCao(bcId){
     PENDING_EXPAND = null;
     updatePendingBadge();
     renderNotifPendingSection();
-    renderPendingBCList();
+    renderDuyetBCContent();
     toast('⏭️ Đã bỏ qua báo cáo', 'info');
   } catch(e){ toast('❌ '+e.message, 'error'); }
 }
@@ -2785,7 +2812,7 @@ async function rejectBaoCao(bcId){
     PENDING_EXPAND = null;
     updatePendingBadge();
     renderNotifPendingSection();
-    renderPendingBCList();
+    renderDuyetBCContent();
     toast('🗑️ Đã từ chối báo cáo', 'info');
   } catch(e){ toast('❌ '+e.message, 'error'); }
 }

@@ -2128,19 +2128,34 @@ async function saveBaoCao(anhUrls){
     gps_lng:        GPS ? GPS.lng : null,
     trang_thai:     'cho_duyet',
   };
+  var headers = {
+    'apikey':        SB_KEY,
+    'Authorization': 'Bearer '+SB_KEY,
+    'Content-Type':  'application/json',
+    'Prefer':        'return=minimal',
+  };
+
   var r = await fetch(SB_URL+'/rest/v1/bao_cao', {
-    method:  'POST',
-    headers: {
-      'apikey':        SB_KEY,
-      'Authorization': 'Bearer '+SB_KEY,
-      'Content-Type':  'application/json',
-      'Prefer':        'return=minimal',
-    },
-    body: JSON.stringify(payload),
+    method: 'POST', headers: headers, body: JSON.stringify(payload),
   });
+
+  // PGRST204: cột trang_thai chưa được tạo trong DB → thử lại không có cột đó
   if(!r.ok){
-    var err = await r.text();
-    throw new Error('Lưu báo cáo thất bại: '+err);
+    var errText = await r.text();
+    if(errText.indexOf('PGRST204') !== -1 || errText.indexOf('trang_thai') !== -1){
+      console.warn('[NK] trang_thai column missing, retrying without it...');
+      var fallback = Object.assign({}, payload);
+      delete fallback.trang_thai;
+      var r2 = await fetch(SB_URL+'/rest/v1/bao_cao', {
+        method: 'POST', headers: headers, body: JSON.stringify(fallback),
+      });
+      if(!r2.ok){
+        var err2 = await r2.text();
+        throw new Error('Lưu báo cáo thất bại: '+err2);
+      }
+      return; // thành công (chế độ không có luồng duyệt)
+    }
+    throw new Error('Lưu báo cáo thất bại: '+errText);
   }
 }
 

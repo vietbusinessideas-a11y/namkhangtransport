@@ -66,7 +66,7 @@
   </div>
   <nav class="sidebar-nav">
     <div class="nav-section"><span class="nav-label">Tổng quan</span><div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>Dashboard</div></div>
-    <div class="nav-section"><span class="nav-label">Nghiệp vụ</span><div class="nav-item" data-page="hopdong"><span class="icon">📋</span>Hợp đồng<span class="nav-badge" id="hdBadge">0</span></div><div class="nav-item" data-page="khachhang"><span class="icon">👥</span>Khách hàng</div></div>
+    <div class="nav-section"><span class="nav-label">Nghiệp vụ</span><div class="nav-item" data-page="hopdong"><span class="icon">📋</span>Hợp đồng<span class="nav-badge" id="hdBadge">0</span></div><div class="nav-item" data-page="khachhang"><span class="icon">👥</span>Khách hàng</div><div class="nav-item" id="nav-duyet-bc" data-page="duyet-bc" style="display:none"><span class="icon">✅</span>Duyệt BC<span class="nav-badge" id="duyetBcBadge" style="display:none;background:#dc2626;color:#fff">0</span></div></div>
     <div class="nav-section"><span class="nav-label">Phương tiện</span><div class="nav-item" data-page="xe"><span class="icon">🚌</span>Xe & Tài xế</div></div>
     <div class="nav-section"><span class="nav-label">Tài chính</span><div class="nav-item" data-page="thuchi"><span class="icon">💸</span>Thu Chi</div><div class="nav-item" data-page="baocao"><span class="icon">📈</span>Báo cáo</div></div>
     <div class="nav-section"><span class="nav-label">Hệ thống</span><div class="nav-item" data-page="caidat"><span class="icon">⚙️</span>Cài đặt</div></div>
@@ -268,6 +268,19 @@
         </div>
       </div>
     </div>
+    <div class="page" id="page-duyet-bc">
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">✅ Duyệt báo cáo tài xế</div><div class="card-sub" id="duyet-bc-sub">Đang tải...</div></div>
+          <button class="btn btn-ghost btn-sm" onclick="checkPendingBaoCao()">🔄 Làm mới</button>
+        </div>
+        <div id="duyet-bc-content" style="padding:8px 16px 20px"></div>
+        <div style="padding:10px 16px;border-top:1px solid var(--border);font-size:.72rem;color:var(--text3)">
+          💡 Báo cáo <strong>đổ dầu</strong> khi duyệt sẽ tự động tạo phiếu chi nhiên liệu tương ứng.
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-caidat">
 
       <!-- ── Quản lý tài khoản tài xế ── -->
