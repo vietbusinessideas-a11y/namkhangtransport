@@ -2833,7 +2833,8 @@ function approveBaoCao(bcId){
         mo_ta:      'Nhiên liệu' + (litFinal ? ' '+litFinal+'L' : '') + (bc.hd_so ? ' — '+bc.hd_so : ''),
       };
       return sbPost('thu_chi', chiPayload).then(function(tcRes){
-        if(tcRes && tcRes[0]) DB.thuChi.unshift(mapTC(Object.assign({id: tcRes[0].id}, chiPayload)));
+        var newId = (tcRes && tcRes[0] && tcRes[0].id) ? tcRes[0].id : ('local-'+Date.now());
+        DB.thuChi.unshift(mapTC(Object.assign({id: newId}, chiPayload)));
         toast('✅ Đã duyệt + tạo phiếu chi '+fmtM(tienFinal), 'success');
       });
     } else {
@@ -2940,7 +2941,8 @@ function bulkApproveBaoCao(){
             mo_ta:      'Nhiên liệu'+(bc.so_lit?' '+bc.so_lit+'L':'')+(bc.hd_so?' — '+bc.hd_so:''),
           };
           return sbPost('thu_chi', chiPayload).then(function(tcRes){
-            if(tcRes && tcRes[0]) DB.thuChi.unshift(mapTC(Object.assign({id: tcRes[0].id}, chiPayload)));
+            var newId = (tcRes && tcRes[0] && tcRes[0].id) ? tcRes[0].id : ('local-'+Date.now());
+            DB.thuChi.unshift(mapTC(Object.assign({id: newId}, chiPayload)));
           }).catch(function(e){ console.warn('bulkApprove: tạo phiếu chi lỗi', e.message); });
         }
       }).then(function(){
