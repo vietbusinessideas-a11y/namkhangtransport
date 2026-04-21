@@ -383,7 +383,7 @@ async function checkOverdueHDAdmin(){
 }
 
 function loadDB(){
-  DB={hopDong:DEFAULT_HD.slice(),thuChi:DEFAULT_TC.slice(),xe:DEFAULT_XE.slice(),taiXe:DEFAULT_TX.slice(),khachHang:DEFAULT_KH.slice()};
+  DB={hopDong:DEFAULT_HD.slice(),thuChi:DEFAULT_TC.slice(),xe:DEFAULT_XE.slice(),taiXe:DEFAULT_TX.slice(),khachHang:DEFAULT_KH.slice(),giaDau:[]};
   updateBadges();
   renderCurrentPage();
 
