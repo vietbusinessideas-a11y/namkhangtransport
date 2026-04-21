@@ -467,7 +467,7 @@ var PAGE_META={
   dashboard:{title:'Dashboard',sub:'',actions:function(){return'';}},
   hopdong:{title:'Hợp đồng',sub:'Quản lý hợp đồng vận chuyển',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="openHDModal()">＋ Thêm hợp đồng</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportHD()">📥 Xuất Excel</button>';}},
   khachhang:{title:'Khách hàng',sub:'Danh sách đối tác',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="openKHModal()">＋ Thêm KH</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportKH()">📥 Xuất Excel</button>';}},
-  xe:{title:'Xe & Tài xế',sub:'Quản lý phương tiện',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="xeTab===\'xe\'?openXeModal():openTXModal()">＋ Thêm mới</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportExcel()">📥 Xuất Excel</button>';}},
+  xe:{title:'Xe & Tài xế',sub:'Quản lý phương tiện',actions:function(){return(isAdmin()?'<button class="btn btn-accent" onclick="xeTab===\'xe\'?openXeModal():openTXModal()">＋ Thêm mới</button>':'')+'<button class="btn btn-ghost btn-sm" onclick="exportExcel()">📥 Xuất Excel</button>'+'<button id="gia-dau-btn" class="btn btn-ghost btn-sm" onclick="openGiaDauModal()" style="border:1.5px solid #f59e0b;background:#fffbeb;color:#92400e;font-weight:700">⛽ Giá dầu</button>';}},
   thuchi:{title:'Thu Chi',sub:'Ghi nhận doanh thu & chi phí',actions:function(){return'<button class="btn btn-green" onclick="openTCModal(\'thu\')">＋ Ghi thu</button><button class="btn btn-red" onclick="openTCModal(\'chi\')">＋ Ghi chi</button><button class="btn btn-ghost btn-sm" onclick="chotLuongThang()" title="Tạo phiếu chi lương hàng loạt cho tài xế">💰 Chốt lương</button><button class="btn btn-ghost btn-sm" onclick="exportTC()">📥 Xuất Excel</button>';}},
   baocao:{title:'Báo cáo & Thống kê',sub:'Phân tích tài chính',actions:function(){return'';}},
   caidat:{title:'Cài đặt',sub:'Thông tin hệ thống',actions:function(){return'';}},
@@ -1400,11 +1400,12 @@ function saveKHEdit(id) {
 // GIÁ DẦU TOÀN HỆ THỐNG
 // ═══════════════════════════════════════
 function updateGiaDauBtn(){
+  // Nút nằm trong topbarActions — chỉ hiện khi đang ở trang xe
   var btn = document.getElementById('gia-dau-btn');
   if(!btn) return;
   var cur = getCurrentGiaDau();
-  if(cur){ btn.innerHTML = '⛽ <strong>'+fmt(cur.gia)+'</strong> đ/L'; btn.title = 'Giá từ '+fmtD(cur.ngay); }
-  else    { btn.innerHTML = '⛽ Chưa có giá dầu'; }
+  if(cur){ btn.innerHTML = '⛽ <strong>'+fmt(cur.gia)+'</strong>đ/L'; btn.title = 'Giá từ '+fmtD(cur.ngay); }
+  else    { btn.innerHTML = '⛽ Giá dầu'; }
 }
 
 function openGiaDauModal(){
@@ -1459,7 +1460,7 @@ function saveGiaDau(){
 // ═══════════════════════════════════════
 var xeTab='xe';
 function switchXeTab(t,el){xeTab=t;document.getElementById('xe-panel').style.display=t==='xe'?'':'none';document.getElementById('taixe-panel').style.display=t==='taixe'?'':'none';document.querySelectorAll('#page-xe .tab').forEach(function(b){b.classList.remove('active');});el.classList.add('active');renderXe();}
-function renderXe(){if(xeTab==='xe')renderXeGrid();else renderTaiXe();}
+function renderXe(){if(xeTab==='xe')renderXeGrid();else renderTaiXe();updateGiaDauBtn();}
 function renderXeGrid(){
   var st={dang_chay:{lbl:'Đang chạy',cls:'xs-busy',ico:'🚌'},san_sang:{lbl:'Sẵn sàng',cls:'xs-ok',ico:'✅'},bao_duong:{lbl:'Bảo dưỡng',cls:'xs-warn',ico:'🔧'}};
   document.getElementById('xe-grid').innerHTML=DB.xe.map(function(x){var s=st[x.tt]||{lbl:x.tt,cls:'xs-ok',ico:'❓'};var dk=Math.round((new Date(x.dangKiem)-new Date())/864e5);var thuCur=DB.thuChi.filter(function(t){return t.xe===x.bien&&t.type==='thu'&&getMY(t.ngay)===DB_MONTH;}).reduce(function(s,t){return s+t.sotien;},0);var hdCount=DB.hopDong.filter(function(h){return h.xe===x.bien;}).length;return'<div class="xe-card"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px"><div><div class="xe-plate">'+x.bien+'</div><div class="xe-type">'+x.loai+' · '+x.nam+'</div></div><span class="xe-status '+s.cls+'">'+s.ico+' '+s.lbl+'</span></div><div class="xe-stats"><div class="xe-stat"><div class="xe-stat-lbl">Km đã chạy</div><div class="xe-stat-val">'+fmt(x.km)+' km</div></div><div class="xe-stat"><div class="xe-stat-lbl">Đăng kiểm</div><div class="xe-stat-val" style="color:'+(dk<60?'var(--orange)':'inherit')+'">'+fmtD(x.dangKiem)+'</div></div><div class="xe-stat"><div class="xe-stat-lbl">Bảo hiểm</div><div class="xe-stat-val">'+fmtD(x.baoHiem)+'</div></div><div class="xe-stat"><div class="xe-stat-lbl">Tổng HĐ</div><div class="xe-stat-val">'+hdCount+' HĐ</div></div></div>'+(dk<60?'<div class="xe-alert">⚠️ Đăng kiểm còn '+dk+' ngày!</div>':'')+'<div style="display:flex;gap:6px;margin-top:10px"><button class="btn btn-accent btn-sm" style="flex:1" onclick="openXeDetail(\''+x.id+'\')">🔍 Chi tiết</button>'+(isAdmin()?'<button class="btn btn-ghost btn-sm" onclick="openXeModal(\''+x.id+'\')">✏️</button><button class="btn btn-sm" style="background:var(--red-light);color:var(--red);border:1px solid #fecaca" onclick="askDelete(\'Xóa xe '+x.bien+'?\',\'Tất cả dữ liệu liên quan sẽ bị mất.\',function(){deleteXe(\''+x.id+'\')})">🗑️</button>':'')+'</div></div>';}).join('');}
