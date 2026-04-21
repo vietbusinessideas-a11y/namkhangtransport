@@ -981,23 +981,30 @@ function openHDDetail(id) {
     '<button class="btn btn-ghost" onclick="closeModal()">Đóng</button>'
     +'<button class="btn btn-ghost" style="color:var(--blue);border-color:var(--blue)" onclick="duplicateHD(\''+h.id+'\')">📋 Nhân đôi</button>'
     +'<button class="btn btn-accent" onclick="closeModal();openHDModal(\''+h.id+'\')">✏️ Sửa</button>');
-  // Async load ảnh báo cáo:
-  // - Ưu tiên: BC có hd_so khớp với HĐ này
-  // - Fallback: BC từ xe đó nhưng chưa gán hd_so (BC cũ trước khi có tính năng liên kết HĐ)
+  // Async load báo cáo tài xế:
+  // Admin → dùng fetchBaoCaoAdmin (tất cả status, có nút Sửa/Xóa)
+  // Không phải admin → dùng fetchBaoCao (chỉ da_duyet, readonly)
   (function loadBaoCaoHD(){
-    var promises = [];
-    if(h.so) promises.push(fetchBaoCao('hd_so', h.so));
-    // Fallback bien_xe CHỈ lấy BC chưa có hd_so → tránh trùng với HĐ khác
-    if(h.xe) promises.push(fetchBaoCao('bien_xe', h.xe, 'hd_so=is.null'));
-    if(!promises.length){ renderBaoCaoSection([], h.taixe); return; }
-    Promise.all(promises).then(function(results){
-      var seen = {}, combined = [];
-      results.forEach(function(rows){ rows.forEach(function(r){ if(!seen[r.id]){ seen[r.id]=true; combined.push(r); } }); });
-      combined.sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
-      renderBaoCaoSection(combined, h.taixe);
-      var xeObj = h.xe ? DB.xe.find(function(v){ return v.bien === h.xe; }) : null;
-      renderFuelSummary(combined, xeObj); // ← hiển thị tóm tắt nhiên liệu
-    });
+    if(isAdmin()){
+      fetchBaoCaoAdmin(h.so, h.xe).then(function(rows){
+        renderBaoCaoAdminSection(rows, h.taixe, h.id);
+        var xeObj = h.xe ? DB.xe.find(function(v){ return v.bien === h.xe; }) : null;
+        renderFuelSummary(rows, xeObj);
+      });
+    } else {
+      var promises = [];
+      if(h.so) promises.push(fetchBaoCao('hd_so', h.so));
+      if(h.xe) promises.push(fetchBaoCao('bien_xe', h.xe, 'hd_so=is.null'));
+      if(!promises.length){ renderBaoCaoSection([], h.taixe); return; }
+      Promise.all(promises).then(function(results){
+        var seen = {}, combined = [];
+        results.forEach(function(rows){ rows.forEach(function(r){ if(!seen[r.id]){ seen[r.id]=true; combined.push(r); } }); });
+        combined.sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
+        renderBaoCaoSection(combined, h.taixe);
+        var xeObj = h.xe ? DB.xe.find(function(v){ return v.bien === h.xe; }) : null;
+        renderFuelSummary(combined, xeObj);
+      });
+    }
   })();
 }
 function openHDModal(id) {
@@ -4316,10 +4323,242 @@ async function deleteBaoCaoPhoto(bcId, photoUrl){
 // Hộp chứa section báo cáo — thêm vào cuối body của modal
 function baoCaoSectionHTML(label){
   return '<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:14px">'
-    +'<div style="font-weight:700;font-size:.82rem;margin-bottom:10px">📸 Ảnh báo cáo từ tài xế'+(label?' — '+label:'')+'</div>'
+    +'<div style="font-weight:700;font-size:.82rem;margin-bottom:10px">📸 Báo cáo từ tài xế'+(label?' — '+label:'')+'</div>'
     +'<div id="modal-baocao" style="min-height:40px">'
     +'<div style="text-align:center;padding:16px;color:var(--text3);font-size:.78rem">⏳ Đang tải...</div>'
     +'</div></div>';
+}
+
+// ═══════════════════════════════════════
+// ADMIN — QUẢN LÝ BÁO CÁO TÀI XẾ
+// ═══════════════════════════════════════
+
+// Cache BC đang xem trong modal HĐ (để Sửa/Xóa có thể tham chiếu)
+var CURRENT_HD_BC = { hdId: null, rows: [] };
+
+// Fetch tất cả BC của 1 HĐ (admin: không lọc trang_thai)
+async function fetchBaoCaoAdmin(hdSo, bienXe){
+  if(!SB_URL||!SB_KEY) return [];
+  var H = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
+  var select = 'select=id,loai,trang_thai,tai_xe_ten,tai_xe_sdt,bien_xe,hd_so,ghi_chu,anh_urls,gps_lat,gps_lng,so_km,so_lit,tong_tien,da_do_day_binh,created_at';
+  var seen = {}, combined = [];
+  try{
+    // Lấy theo hd_so
+    if(hdSo){
+      var r1 = await fetch(SB_URL+'/rest/v1/bao_cao?hd_so=eq.'+encodeURIComponent(hdSo)+'&order=created_at.asc&'+select,{headers:H});
+      if(r1.ok){ var rows1=await r1.json(); rows1.forEach(function(r){if(!seen[r.id]){seen[r.id]=true;combined.push(r);}}); }
+    }
+    // Fallback: BC của xe chưa gán hd_so
+    if(bienXe){
+      var r2 = await fetch(SB_URL+'/rest/v1/bao_cao?bien_xe=eq.'+encodeURIComponent(bienXe)+'&hd_so=is.null&order=created_at.asc&'+select,{headers:H});
+      if(r2.ok){ var rows2=await r2.json(); rows2.forEach(function(r){if(!seen[r.id]){seen[r.id]=true;combined.push(r);}}); }
+    }
+  }catch(e){ console.warn('fetchBaoCaoAdmin:', e.message); }
+  combined.sort(function(a,b){return new Date(a.created_at)-new Date(b.created_at);});
+  return combined;
+}
+
+// Badge trạng thái BC
+function bcTrangThaiBadge(tt){
+  var map = {
+    cho_duyet: {lbl:'⏳ Chờ duyệt', bg:'#fef3c7', color:'#92400e', border:'#fcd34d'},
+    da_duyet:  {lbl:'✅ Đã duyệt',  bg:'#f0fdf4', color:'#166534', border:'#86efac'},
+    tu_choi:   {lbl:'❌ Từ chối',   bg:'#fef2f2', color:'#991b1b', border:'#fca5a5'},
+  };
+  var s = map[tt] || {lbl: tt||'—', bg:'#f3f4f6', color:'#374151', border:'#d1d5db'};
+  return '<span style="font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:20px;background:'+s.bg+';color:'+s.color+';border:1px solid '+s.border+'">'+s.lbl+'</span>';
+}
+
+// Render danh sách BC với quyền admin (Sửa + Xóa từng dòng)
+function renderBaoCaoAdminSection(rows, hdTaiXe, hdId){
+  CURRENT_HD_BC = { hdId: hdId, rows: rows };
+  var el = document.getElementById('modal-baocao');
+  if(!el) return;
+
+  if(!rows.length){
+    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3);font-size:.8rem">Chưa có báo cáo nào từ tài xế cho hợp đồng này</div>';
+    return;
+  }
+
+  var html = '<div style="font-size:.72rem;color:var(--text3);margin-bottom:10px">'+rows.length+' báo cáo • Click ✏️ để sửa, 🗑️ để xóa</div>';
+
+  rows.forEach(function(bc){
+    var d   = new Date(bc.created_at);
+    var dStr= d.toLocaleDateString('vi-VN')+' '+d.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+    var txMismatch = hdTaiXe && bc.tai_xe_ten && bc.tai_xe_ten.trim().toLowerCase() !== hdTaiXe.trim().toLowerCase();
+    var mismatchBadge = txMismatch
+      ? '<span style="font-size:.63rem;font-weight:700;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;padding:1px 5px;margin-left:4px">⚠️ TX khác</span>' : '';
+
+    // Stats row
+    var statsHtml = '';
+    var statItems = [];
+    if(bc.so_km)    statItems.push(['📏 Km', fmt(bc.so_km)+' km']);
+    if(bc.so_lit)   statItems.push(['🛢️ Lít', bc.so_lit+' L']);
+    if(bc.tong_tien) statItems.push(['💰 Tiền', fmtM(bc.tong_tien)]);
+    if(statItems.length){
+      statsHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:6px 0">'
+        + statItems.map(function(s){ return '<span style="font-size:.72rem;color:var(--text2)">'+s[0]+' <strong>'+s[1]+'</strong></span>'; }).join('')
+        + '</div>';
+    }
+
+    // Photos (thumbnail strip, max 4)
+    var photosHtml = '';
+    if(bc.anh_urls && bc.anh_urls.length){
+      photosHtml = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'
+        + bc.anh_urls.slice(0,5).map(function(url){
+            return '<a href="'+url+'" target="_blank" style="display:block;width:60px;height:60px;border-radius:7px;overflow:hidden;background:var(--border);flex-shrink:0">'
+              +'<img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.parentElement.style.display=\'none\'">'
+              +'</a>';
+          }).join('')
+        + (bc.anh_urls.length>5 ? '<div style="width:60px;height:60px;border-radius:7px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.72rem;color:var(--text3)">+' + (bc.anh_urls.length-5)+'</div>' : '')
+        + '</div>';
+    }
+
+    var safeId = bc.id;
+    html += '<div id="bc-row-'+safeId+'" style="margin-bottom:10px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid '+(txMismatch?'#fcd34d':'var(--border)')+'">'
+      // Header
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+            +'<span style="font-size:.78rem;font-weight:700">'+(BC_LOAI_LABEL[bc.loai]||bc.loai)+'</span>'
+            + bcTrangThaiBadge(bc.trang_thai)
+            + mismatchBadge
+          +'</div>'
+          +'<div style="font-size:.64rem;color:var(--text3);margin-top:2px">'+dStr+(bc.tai_xe_ten?' · '+bc.tai_xe_ten:'')+(bc.bien_xe?' · '+bc.bien_xe:'')+'</div>'
+        +'</div>'
+        // Action buttons
+        +'<div style="display:flex;gap:6px;flex-shrink:0">'
+          +'<button onclick="openEditBaoCaoModal(\''+safeId+'\')" style="padding:4px 10px;font-size:.72rem;font-weight:600;border:1px solid var(--border);background:var(--surface);border-radius:7px;cursor:pointer;color:var(--blue)" title="Sửa báo cáo này">✏️ Sửa</button>'
+          +'<button onclick="deleteBaoCaoRecord(\''+safeId+'\')" style="padding:4px 10px;font-size:.72rem;font-weight:600;border:1px solid #fca5a5;background:#fef2f2;border-radius:7px;cursor:pointer;color:#dc2626" title="Xóa báo cáo này">🗑️ Xóa</button>'
+        +'</div>'
+      +'</div>'
+      + statsHtml
+      +(bc.ghi_chu ? '<div style="font-size:.72rem;color:var(--text2);margin-top:6px;padding:7px 10px;background:var(--bg);border-radius:7px">💬 '+bc.ghi_chu+'</div>' : '')
+      + photosHtml
+    +'</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+// Mở form sửa báo cáo — thay thế nội dung mainModal
+function openEditBaoCaoModal(bcId){
+  if(!requireAdmin()) return;
+  var bc = CURRENT_HD_BC.rows.find(function(r){ return r.id===bcId; });
+  if(!bc){ toast('Không tìm thấy báo cáo','error'); return; }
+
+  var loaiOpts = ['do_dau','km_dau','km_cuoi','hoan_thanh','su_co','bao_cao_khac','hop_dong','thay_nhot'].map(function(v){
+    return '<option value="'+v+'"'+(bc.loai===v?' selected':'')+'>'+(BC_LOAI_LABEL[v]||v)+'</option>';
+  }).join('');
+  var ttOpts = ['cho_duyet','da_duyet','tu_choi'].map(function(v){
+    var lbl={cho_duyet:'⏳ Chờ duyệt',da_duyet:'✅ Đã duyệt',tu_choi:'❌ Từ chối'}[v]||v;
+    return '<option value="'+v+'"'+(bc.trang_thai===v?' selected':'')+'>'+ lbl+'</option>';
+  }).join('');
+
+  var d = new Date(bc.created_at);
+  var dStr = d.toLocaleDateString('vi-VN')+' '+d.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+
+  showModal('✏️ Sửa báo cáo tài xế',
+    (BC_LOAI_LABEL[bc.loai]||bc.loai)+' — '+(bc.tai_xe_ten||'?')+' · '+dStr,
+    '<div class="form-row">'
+      +'<div class="fg"><label class="fl">Loại báo cáo</label><select class="fc" id="ebc-loai">'+loaiOpts+'</select></div>'
+      +'<div class="fg"><label class="fl">Trạng thái</label><select class="fc" id="ebc-tt">'+ttOpts+'</select></div>'
+    +'</div>'
+    +'<div class="form-row">'
+      +'<div class="fg"><label class="fl">Số km đồng hồ <span style="font-size:.68rem;color:var(--text3)">(nếu có)</span></label><input type="text" inputmode="numeric" class="fc" id="ebc-km" value="'+(bc.so_km?fmt(bc.so_km):'')+'" placeholder="VD: 45.230" oninput="fmtInput(this)"></div>'
+      +'<div class="fg"><label class="fl">Số lít đổ <span style="font-size:.68rem;color:var(--text3)">(nếu có)</span></label><input type="number" step="0.1" class="fc" id="ebc-lit" value="'+(bc.so_lit||'')+'" placeholder="VD: 50"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+      +'<div class="fg"><label class="fl">Tổng tiền <span style="font-size:.68rem;color:var(--text3)">(nếu có)</span></label><input type="text" inputmode="numeric" class="fc" id="ebc-tien" value="'+(bc.tong_tien?fmt(bc.tong_tien):'')+'" placeholder="VD: 1.500.000" oninput="fmtInput(this)"></div>'
+      +'<div class="fg"><label class="fl">Biển số xe</label><input class="fc" id="ebc-bien" value="'+(bc.bien_xe||'')+'" placeholder="VD: 51B-12345"></div>'
+    +'</div>'
+    +'<div class="fg"><label class="fl">Ghi chú / mô tả</label><textarea class="fc" id="ebc-ghichu" rows="3" placeholder="Ghi chú của tài xế hoặc admin bổ sung...">'+(bc.ghi_chu||'')+'</textarea></div>'
+    // Ảnh hiện tại
+    +(bc.anh_urls&&bc.anh_urls.length
+      ? '<div style="margin-top:10px"><div style="font-size:.72rem;font-weight:600;color:var(--text2);margin-bottom:6px">📷 Ảnh đính kèm ('+bc.anh_urls.length+' ảnh)</div>'
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+        +bc.anh_urls.map(function(url){
+          return '<a href="'+url+'" target="_blank" style="display:block;width:72px;height:72px;border-radius:8px;overflow:hidden;background:var(--border)">'
+            +'<img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy">'
+            +'</a>';
+        }).join('')
+        +'</div><div style="font-size:.65rem;color:var(--text3);margin-top:4px">Quản lý ảnh: dùng nút ✕ trên ảnh ở màn hình chi tiết HĐ</div></div>'
+      : ''),
+    '<button class="btn btn-ghost" onclick="openHDDetail(\''+CURRENT_HD_BC.hdId+'\')">‹ Quay lại HĐ</button>'
+    +'<button class="btn btn-accent" onclick="saveEditBaoCao(\''+bcId+'\')">💾 Lưu thay đổi</button>'
+  );
+}
+
+// Lưu chỉnh sửa báo cáo
+function saveEditBaoCao(bcId){
+  if(!requireAdmin()) return;
+  var loai   = document.getElementById('ebc-loai').value;
+  var tt     = document.getElementById('ebc-tt').value;
+  var kmRaw  = (document.getElementById('ebc-km').value||'').replace(/[.,\s]/g,'');
+  var litRaw = (document.getElementById('ebc-lit').value||'').replace(',','.');
+  var tienRaw= (document.getElementById('ebc-tien').value||'').replace(/[.,\s]/g,'');
+  var bien   = (document.getElementById('ebc-bien').value||'').trim();
+  var ghichu = (document.getElementById('ebc-ghichu').value||'').trim();
+
+  var kmVal   = kmRaw   ? parseInt(kmRaw)     : null;
+  var litVal  = litRaw  ? parseFloat(litRaw)  : null;
+  var tienVal = tienRaw ? parseInt(tienRaw)   : null;
+
+  var patch = {
+    loai:        loai,
+    trang_thai:  tt,
+    so_km:       kmVal,
+    so_lit:      litVal,
+    tong_tien:   tienVal,
+    bien_xe:     bien || null,
+    ghi_chu:     ghichu || null,
+  };
+
+  var saveBtn = document.querySelector('#mainModal .btn-accent');
+  if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='⏳ Đang lưu...'; }
+
+  patchBaoCao(bcId, patch)
+    .then(function(){
+      // Cập nhật cache local
+      var idx = CURRENT_HD_BC.rows.findIndex(function(r){ return r.id===bcId; });
+      if(idx !== -1){
+        CURRENT_HD_BC.rows[idx] = Object.assign({}, CURRENT_HD_BC.rows[idx], patch);
+      }
+      toast('✅ Đã cập nhật báo cáo','success');
+      // Quay về modal HĐ
+      openHDDetail(CURRENT_HD_BC.hdId);
+    })
+    .catch(function(e){
+      toast('❌ Lưu thất bại: '+(e.message||'Lỗi'),'error');
+      if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='💾 Lưu thay đổi'; }
+    });
+}
+
+// Xóa hẳn 1 báo cáo khỏi DB
+function deleteBaoCaoRecord(bcId){
+  if(!requireAdmin()) return;
+  var bc = CURRENT_HD_BC.rows.find(function(r){ return r.id===bcId; });
+  var label = bc ? (BC_LOAI_LABEL[bc.loai]||bc.loai)+' — '+(bc.tai_xe_ten||'?') : 'báo cáo này';
+  askConfirm({
+    icon:'🗑️',
+    title:'Xóa '+label+'?',
+    msg:'Tất cả ảnh và dữ liệu của báo cáo này sẽ bị xóa vĩnh viễn.',
+    btnLabel:'Xóa',
+    btnClass:'btn-red',
+  }, function(){
+    var H={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
+    fetch(SB_URL+'/rest/v1/bao_cao?id=eq.'+bcId,{method:'DELETE',headers:H})
+      .then(function(r){
+        if(!r.ok) return r.text().then(function(t){ throw new Error(t); });
+        // Xóa khỏi cache
+        CURRENT_HD_BC.rows = CURRENT_HD_BC.rows.filter(function(r){ return r.id!==bcId; });
+        // Xóa row khỏi DOM ngay lập tức
+        var row = document.getElementById('bc-row-'+bcId);
+        if(row){ row.style.transition='opacity .3s'; row.style.opacity='0'; setTimeout(function(){ row.remove(); }, 310); }
+        toast('🗑️ Đã xóa báo cáo','info');
+      })
+      .catch(function(e){ toast('❌ Xóa thất bại: '+e.message,'error'); });
+  });
 }
 
 // ═══════════════════════════════════════
