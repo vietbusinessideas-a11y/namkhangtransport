@@ -3699,8 +3699,8 @@ function loadXeKmStats(baseKm, bienSo, hdDoneCount){
 
   // Lấy km_cuoi mới nhất (= số đọc ODO hiện tại) và km_dau đầu tiên (= km lúc bắt đầu dùng)
   Promise.all([
-    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_cuoi&so_km=not.is.null&trang_thai=neq.tu_choi&select=so_km,hd_so,created_at&order=so_km.desc&limit=1'),
-    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_dau&so_km=not.is.null&trang_thai=neq.tu_choi&select=so_km,hd_so,created_at&order=so_km.asc&limit=1')
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_cuoi&so_km=not.is.null&or=(trang_thai.is.null,trang_thai.neq.tu_choi)&select=so_km,hd_so,created_at&order=so_km.desc&limit=1'),
+    sbFetch('bao_cao','bien_xe=eq.'+bienEnc+'&loai=eq.km_dau&so_km=not.is.null&or=(trang_thai.is.null,trang_thai.neq.tu_choi)&select=so_km,hd_so,created_at&order=so_km.asc&limit=1')
   ]).then(function(res){
     var latestCuoi = res[0] && res[0][0] ? res[0][0] : null;
     var firstDau   = res[1] && res[1][0] ? res[1][0] : null;

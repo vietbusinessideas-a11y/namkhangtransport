@@ -721,10 +721,13 @@ async function sbGet(table, query){
 
 async function sbPatch(table, filter, body){
   if(!SB_URL) throw new Error('offline');
-  var h = Object.assign({}, sbHeaders(), { 'Prefer': 'return=representation' });
+  var h = Object.assign({}, sbHeaders(), { 'Prefer': 'return=minimal' });
   var r = await fetch(SB_URL+'/rest/v1/'+table+'?'+filter, { method:'PATCH', headers:h, body:JSON.stringify(body) });
-  if(!r.ok) throw new Error(r.status);
-  return r.json();
+  if(!r.ok){
+    var errText = await r.text();
+    throw new Error(r.status + ': ' + errText);
+  }
+  return null; // 204 No Content — OK
 }
 
 // ═══════════════════════════════════════
@@ -2198,12 +2201,19 @@ async function submitReport(){
         txt.textContent = 'Đang cập nhật hợp đồng...';
         try{
           await sbPatch('hop_dong', 'so_hd=eq.'+encodeURIComponent(activeHD.so), { trang_thai:'hoan_thanh' });
-          // Cập nhật local cache để UI phản ánh ngay
+          // Xoá HĐ vừa hoàn thành khỏi cache ngay lập tức
           ACTIVE_HDS = ACTIVE_HDS.filter(function(h){ return h.so !== activeHD.so; });
-          console.log('[NK] HĐ '+activeHD.so+' → hoan_thanh');
+          // Reset trạng thái tiến trình chuyến
+          TRIP_REPORTS_DONE = {};
+          // Re-render ngay để không còn thấy chuyến cũ
+          renderActiveContracts(ACTIVE_HDS);
+          var hasDC = ACTIVE_HDS.some(function(h){ return h.tt==='dang_chay'; });
+          var hasCX = ACTIVE_HDS.some(function(h){ return h.tt==='cho_xe'; });
+          setReportButtons(hasDC, hasCX);
+          console.log('[NK] HĐ '+activeHD.so+' → hoan_thanh, ACTIVE_HDS còn:', ACTIVE_HDS.length);
         } catch(patchErr){
           console.warn('[NK] Không cập nhật được trạng thái HĐ:', patchErr.message);
-          // Không throw — báo cáo ảnh đã lưu thành công rồi
+          // Không throw — báo cáo BC đã lưu thành công rồi
         }
       }
     }
@@ -2211,15 +2221,18 @@ async function submitReport(){
     var type = MODAL_TITLES[CURRENT_REPORT] || CURRENT_REPORT;
     var reportedType = CURRENT_REPORT; // lưu lại trước khi closeModal reset về null
     closeModal();
-    showToast('✅ Đã gửi '+type+' · '+PHOTOS.length+' ảnh');
+    var photoCount = PHOTOS.length;
+    showToast('✅ Đã gửi '+type+(photoCount?' · '+photoCount+' ảnh':''));
 
-    // ── Refresh tiến trình chuyến đi ─────────────────────────────────────────
-    var runningHD = ACTIVE_HDS.find(function(h){ return h.tt==='dang_chay'; });
-    if(runningHD){
-      TRIP_REPORTS_DONE[reportedType] = true;
-      renderTripProgress();
-      enforceReportOrder();
-      setTimeout(function(){ loadTripProgress(runningHD.so); }, 800);
+    // ── Refresh tiến trình chuyến đi (chỉ nếu chuyến chưa hoàn thành) ────────
+    if(reportedType !== 'hoan_thanh'){
+      var runningHD = ACTIVE_HDS.find(function(h){ return h.tt==='dang_chay'; });
+      if(runningHD){
+        TRIP_REPORTS_DONE[reportedType] = true;
+        renderTripProgress();
+        enforceReportOrder();
+        setTimeout(function(){ loadTripProgress(runningHD.so); }, 800);
+      }
     }
 
     // ── Nếu vừa gửi báo cáo thay nhớt → patch xe + log bảo dưỡng + reload card ──
